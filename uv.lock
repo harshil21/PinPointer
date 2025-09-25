@@ -326,6 +326,7 @@ dependencies = [
     { name = "adafruit-circuitpython-rfm" },
     { name = "pygpsclient" },
     { name = "rpi-gpio" },
+    { name = "spidev" },
 ]
 
 [package.metadata]
@@ -333,6 +334,7 @@ requires-dist = [
     { name = "adafruit-circuitpython-rfm", specifier = ">=1.0.7" },
     { name = "pygpsclient", specifier = ">=1.5.13" },
     { name = "rpi-gpio", specifier = ">=0.7.1" },
+    { name = "spidev", specifier = ">=3.8" },
 ]
 
 [[package]]
@@ -495,6 +497,12 @@ name = "rpi-gpio"
 version = "0.7.1"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c4/0f/10b524a12b3445af1c607c27b2f5ed122ef55756e29942900e5c950735f2/RPi.GPIO-0.7.1.tar.gz", hash = "sha256:cd61c4b03c37b62bba4a5acfea9862749c33c618e0295e7e90aa4713fb373b70", size = 29090, upload-time = "2022-02-06T15:15:06.022Z" }
+
+[[package]]
+name = "spidev"
+version = "3.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/87/039b6eeea781598015b538691bc174cc0bf77df9d4d2d3b8bf9245c0de8c/spidev-3.8.tar.gz", hash = "sha256:2bc02fb8c6312d519ebf1f4331067427c0921d3f77b8bcaf05189a2e8b8382c0", size = 13893, upload-time = "2025-09-15T18:56:20.672Z" }
 
 [[package]]
 name = "sysv-ipc"
