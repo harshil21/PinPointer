@@ -7,4 +7,5 @@ requires-python = ">=3.13"
 dependencies = [
     "adafruit-circuitpython-rfm>=1.0.7",
     "pygpsclient>=1.5.13",
+    "rpi-gpio>=0.7.1",
 ]
