@@ -59,16 +59,12 @@ wheels = [
 
 [[package]]
 name = "adafruit-circuitpython-rfm"
-version = "1.0.7"
-source = { registry = "https://pypi.org/simple" }
+version = "0.0.0+auto.0"
+source = { git = "https://github.com/harshil21/adafruit_rfm_spidev.git?branch=main#4fe880706bb713e6e40a2f1dfa7f8e71f0c23b30" }
 dependencies = [
     { name = "adafruit-blinka" },
     { name = "adafruit-circuitpython-busdevice" },
     { name = "asyncio" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/fb/ad/8c76b87818183e94d840ff501307cafd8d9e72441b8d624be69daa554ff2/adafruit_circuitpython_rfm-1.0.7.tar.gz", hash = "sha256:7b01f5f31cd26dd104b6f6a2363f8c36576a0d16ca53abf5b4c2c25eecb04f01", size = 47164, upload-time = "2025-07-07T20:45:01.251Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/9a/ab8a63774233af3dcaca403237e3e3ded8225f6d4a1d05c914eb60f70580/adafruit_circuitpython_rfm-1.0.7-py3-none-any.whl", hash = "sha256:f138df43c6381fdd6abb558f0733ce814ce597205e0afe48fbf014062dfc2ff6", size = 31625, upload-time = "2025-07-07T20:45:00.023Z" },
 ]
 
 [[package]]
@@ -331,7 +327,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "adafruit-circuitpython-rfm", specifier = ">=1.0.7" },
+    { name = "adafruit-circuitpython-rfm", git = "https://github.com/harshil21/adafruit_rfm_spidev.git?branch=main" },
     { name = "pygpsclient", specifier = ">=1.5.13" },
     { name = "rpi-gpio", specifier = ">=0.7.1" },
     { name = "spidev", specifier = ">=3.8" },

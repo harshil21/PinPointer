@@ -10,3 +10,7 @@ dependencies = [
     "rpi-gpio>=0.7.1",
     "spidev>=3.8",
 ]
+
+[tool.uv.sources]
+adafruit-circuitpython-rfm = {git = "https://github.com/harshil21/adafruit_rfm_spidev.git", branch="main"}
+
