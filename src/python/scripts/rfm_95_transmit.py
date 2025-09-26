@@ -12,7 +12,7 @@ spi = busio.SPI(board.SCLK, MOSI=board.MOSI, MISO=board.MISO)
 cs = digitalio.DigitalInOut(board.CE0)  # NSS/CS
 reset = digitalio.DigitalInOut(board.D17)  # RESET
 
-rfm = rfm9x.RFM9x(spi, cs, reset, 915)  # e.g., 915 MHz for US/AU
+rfm = rfm9x.RFM9x(spi, cs, reset, 915, baudrate=1_000_000)  # e.g., 915 MHz for US/AU
 rfm.tx_power = 13  # Transmit power in dBm (5-23)
 rfm.spreading_factor = 7  # 6-12
 rfm.signal_bandwidth = 125000  # Bandwidth in Hz
