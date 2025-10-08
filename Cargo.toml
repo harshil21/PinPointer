@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "src/rust/pinpointer",
+    "src/rust/ground_station"
+]
+resolver = "3"

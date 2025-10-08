@@ -1,0 +1,8 @@
+[package]
+name = "pinpointer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nmea = { version = "0.7.0", features = ["default"]}
+serialport = "4.7.3"
