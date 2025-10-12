@@ -22,6 +22,8 @@ target
 
 # Don't commit KiCAD backup files:
 kicad/**/*.zip
+kicad/**/*.kicad_prl
+kicad/**/*.bak
 
 # Added by cargo
 
