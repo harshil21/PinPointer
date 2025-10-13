@@ -562,7 +562,7 @@
 		)
 		(embedded_fonts no)
 	)
-	(symbol "LC29H"
+	(symbol "LC29H (DA)"
 		(pin_names
 			(offset 1.016)
 		)
@@ -578,7 +578,7 @@
 				(justify left top)
 			)
 		)
-		(property "Value" "LC29H"
+		(property "Value" "LC29H (DA)"
 			(at -22.86 -35.56 0)
 			(effects
 				(font
@@ -635,7 +635,7 @@
 				(hide yes)
 			)
 		)
-		(property "SNAPEDA_PN" "LC29H"
+		(property "SNAPEDA_PN" "LC29H (DA)"
 			(at -0.762 13.208 0)
 			(effects
 				(font
@@ -665,7 +665,7 @@
 				(hide yes)
 			)
 		)
-		(symbol "LC29H_0_0"
+		(symbol "LC29H (DA)_0_0"
 			(rectangle
 				(start -22.86 22.86)
 				(end 22.86 -33.02)
@@ -767,46 +767,10 @@
 					)
 				)
 			)
-			(pin no_connect line
-				(at -27.94 -17.78 0)
-				(length 5.08)
-				(name "RESERVED"
-					(effects
-						(font
-							(size 1.016 1.016)
-						)
-					)
-				)
-				(number "5"
-					(effects
-						(font
-							(size 1.016 1.016)
-						)
-					)
-				)
-			)
-			(pin no_connect line
-				(at -27.94 -20.32 0)
-				(length 5.08)
-				(name "RESERVED__1"
-					(effects
-						(font
-							(size 1.016 1.016)
-						)
-					)
-				)
-				(number "6"
-					(effects
-						(font
-							(size 1.016 1.016)
-						)
-					)
-				)
-			)
-			(pin no_connect line
+			(pin output line
 				(at -27.94 -22.86 0)
 				(length 5.08)
-				(name "RESERVED__2"
+				(name "TXD2"
 					(effects
 						(font
 							(size 1.016 1.016)
@@ -821,10 +785,10 @@
 					)
 				)
 			)
-			(pin no_connect line
+			(pin input line
 				(at -27.94 -25.4 0)
 				(length 5.08)
-				(name "RESERVED__3"
+				(name "RXD2"
 					(effects
 						(font
 							(size 1.016 1.016)
@@ -875,7 +839,7 @@
 					)
 				)
 			)
-			(pin power_in line
+			(pin power_out line
 				(at 27.94 17.78 180)
 				(length 5.08)
 				(name "VDD_RF"
@@ -893,7 +857,7 @@
 					)
 				)
 			)
-			(pin power_in line
+			(pin power_out line
 				(at 27.94 15.24 180)
 				(length 5.08)
 				(name "VDD_EXT"
@@ -968,7 +932,7 @@
 			(pin input clock
 				(at 27.94 -2.54 180)
 				(length 5.08)
-				(name "I2C_SCL"
+				(name "I2C_SCL/SPI_CLK"
 					(effects
 						(font
 							(size 1.016 1.016)
@@ -986,7 +950,7 @@
 			(pin bidirectional line
 				(at 27.94 -5.08 180)
 				(length 5.08)
-				(name "I2C_SDA"
+				(name "I2C_SDA/SPI_CS"
 					(effects
 						(font
 							(size 1.016 1.016)
@@ -1004,7 +968,7 @@
 			(pin output line
 				(at 27.94 -10.16 180)
 				(length 5.08)
-				(name "TXD"
+				(name "TXD1"
 					(effects
 						(font
 							(size 1.016 1.016)
@@ -1022,7 +986,7 @@
 			(pin input line
 				(at 27.94 -12.7 180)
 				(length 5.08)
-				(name "RXD"
+				(name "RXD1"
 					(effects
 						(font
 							(size 1.016 1.016)
@@ -1102,6 +1066,44 @@
 					)
 				)
 				(number "24"
+					(effects
+						(font
+							(size 1.016 1.016)
+						)
+					)
+				)
+			)
+		)
+		(symbol "LC29H (DA)_1_0"
+			(pin input line
+				(at -27.94 -17.78 0)
+				(length 5.08)
+				(name "D_SEL1"
+					(effects
+						(font
+							(size 1.016 1.016)
+						)
+					)
+				)
+				(number "5"
+					(effects
+						(font
+							(size 1.016 1.016)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -27.94 -20.32 0)
+				(length 5.08)
+				(name "D_SEL2"
+					(effects
+						(font
+							(size 1.016 1.016)
+						)
+					)
+				)
+				(number "6"
 					(effects
 						(font
 							(size 1.016 1.016)
@@ -2017,25 +2019,23 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(property "Reference" "U"
-			(at -12.7 22.86 0)
+		(property "Reference" "LoRa_Radio_Module1"
+			(at 0 27.94 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left bottom)
 			)
 		)
 		(property "Value" "RFM95W-915S2"
-			(at -12.7 -22.86 0)
+			(at 0 25.4 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left bottom)
 			)
 		)
-		(property "Footprint" "RFM95W-915S2:XCVR_RFM95W-915S2"
+		(property "Footprint" "sirius:RFM95W-915S2"
 			(at 0 0 0)
 			(effects
 				(font
@@ -2431,7 +2431,7 @@
 				)
 			)
 			(pin power_in line
-				(at 17.78 -17.78 180)
+				(at 17.78 -10.16 180)
 				(length 5.08)
 				(name "GND"
 					(effects
@@ -2449,7 +2449,7 @@
 				)
 			)
 			(pin power_in line
-				(at 17.78 -17.78 180)
+				(at 17.78 -13.97 180)
 				(length 5.08)
 				(name "GND"
 					(effects
