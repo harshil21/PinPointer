@@ -3,15 +3,22 @@ name = "pinpointer"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "adafruit-circuitpython-rfm>=1.0.7",
-    "paramiko>=4.0.0",
-    "pygpsclient>=1.5.13",
-    "rpi-gpio>=0.7.1",
+	# "paramiko>=4.0.0",
+	# k"pygpsclient>=1.5.13",
+	# "rpi-gpio>=0.7.1",
     "spidev>=3.8",
+    "openems",
+    "csxcad",
+    "matplotlib",
+    "pyqt6",
 ]
 
 [tool.uv.sources]
 adafruit-circuitpython-rfm = {git = "https://github.com/harshil21/adafruit_rfm_spidev.git", branch="main"}
+openems = { path = "wheels/openems-0.0.36.post1.dev133+gb0b835155-cp314-cp314-linux_x86_64.whl" }
+csxcad = { path = "wheels/csxcad-0.6.3.post1.dev93+g28ac61481-cp314-cp314-linux_x86_64.whl" }
+
 

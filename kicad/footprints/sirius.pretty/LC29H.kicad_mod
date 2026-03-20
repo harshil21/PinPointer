@@ -1,10 +1,10 @@
-(footprint "XCVR_LC29H"
+(footprint "LC29H"
 	(version 20241229)
 	(generator "pcbnew")
 	(generator_version "9.0")
 	(layer "F.Cu")
 	(property "Reference" "REF**"
-		(at -4.425 -9.885 0)
+		(at -0.03 -9.74 0)
 		(layer "F.SilkS")
 		(uuid "ac0cf9de-dda9-4959-ab3d-ef5d58ee072d")
 		(effects
@@ -15,7 +15,7 @@
 		)
 	)
 	(property "Value" "XCVR_LC29H"
-		(at -1.25 9.885 0)
+		(at -0.02 9.88 0)
 		(layer "F.Fab")
 		(uuid "8d24fb14-d4e3-4187-a38f-48bc6f5034bd")
 		(effects
@@ -111,8 +111,8 @@
 		(uuid "a66c6326-8583-4c99-aef9-e5329084abf3")
 	)
 	(fp_circle
-		(center -8.35 -7)
-		(end -8.25 -7)
+		(center -7.42 -7.99)
+		(end -7.32 -7.99)
 		(stroke
 			(width 0.2)
 			(type solid)
@@ -890,8 +890,8 @@
 		(uuid "10e764b7-80ad-4365-a80d-5b452e6040ac")
 	)
 	(fp_line
-		(start -10.35 -11)
-		(end -10.35 11)
+		(start -8.25 -8.84)
+		(end -8.25 8.48)
 		(stroke
 			(width 0.05)
 			(type solid)
@@ -900,8 +900,8 @@
 		(uuid "a5246223-8669-4148-aaf6-120b72d47603")
 	)
 	(fp_line
-		(start -10.35 11)
-		(end 10.35 11)
+		(start -8.25 8.49)
+		(end 8.39 8.49)
 		(stroke
 			(width 0.05)
 			(type solid)
@@ -910,8 +910,8 @@
 		(uuid "dcb49dc8-2a9e-4ec0-bb3a-7dc8a1988179")
 	)
 	(fp_line
-		(start 10.35 -11)
-		(end -10.35 -11)
+		(start 8.39 -8.84)
+		(end -8.25 -8.84)
 		(stroke
 			(width 0.05)
 			(type solid)
@@ -920,8 +920,8 @@
 		(uuid "8b926627-575a-4a85-87f1-76a85ba0a767")
 	)
 	(fp_line
-		(start 10.35 11)
-		(end 10.35 -11)
+		(start 8.39 8.49)
+		(end 8.39 -8.84)
 		(stroke
 			(width 0.05)
 			(type solid)
@@ -970,8 +970,8 @@
 		(uuid "eb1a1a9b-8529-4eae-bce0-5585c4915d72")
 	)
 	(fp_circle
-		(center -8.35 -7)
-		(end -8.25 -7)
+		(center -7.42 -7.99)
+		(end -7.32 -7.99)
 		(stroke
 			(width 0.2)
 			(type solid)
@@ -1149,4 +1149,15 @@
 		(uuid "c77cd8cc-eb65-40c9-bdb3-d0cf319f392d")
 	)
 	(embedded_fonts no)
+	(model "${KIPRJMOD}/3dmodels/LC29H.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz -90 -0 -0)
+		)
+	)
 )
