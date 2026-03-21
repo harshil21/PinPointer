@@ -14,17 +14,17 @@ from openEMS.physical_constants import EPS0, C0
 CENTER_FREQUENCY  = 915e6
 FC_HALF_BANDWIDTH = 100e6       # valid results up to CENTER + this
 
-BOARD_WIDTH       = 42.0      # X [mm]
-BOARD_LENGTH      = 65.386    # Y [mm]
+BOARD_WIDTH       = 42.12     # X [mm]
+BOARD_LENGTH      = 65.54    # Y [mm]
 BOARD_THICKNESS   = 1.6       # Z [mm]
 SUBSTRATE_EPSR    = 4.6
 SUBSTRATE_LOSS_TANGENT = 0.015
 
-KEEPOUT_WIDTH  = 14.0   # left-edge strip with no GND copper [mm]
+KEEPOUT_WIDTH  = 13.18   # left-edge strip with no GND copper [mm]
 TOP_MARGIN     = 2.0    # gap from board top to SC stub top [mm]
 BOTTOM_MARGIN  = 1.0    # minimum clearance from board bottom to arm end [mm]
 
-SC_STUB_LENGTH   = 13.0  # SC stub X length; arm spine sits at GND_X - SC_STUB_LENGTH [mm]
+SC_STUB_LENGTH   = 12.0  # SC stub X length; arm spine sits at GND_X - SC_STUB_LENGTH [mm]
 SC_TRACE_WIDTH   = 1.0  # SC stub Y height [mm]
 FEED_TRACE_WIDTH = 0.5  # feed stub Y height [mm]
 FEED_SEPARATION  = 0.3  # Y gap from SC stub bottom to feed stub top [mm]  ← IMPEDANCE TUNE
@@ -37,7 +37,7 @@ INIT_LENGTH   = 10.0    # spine length before first U [mm]           ← fine fr
 MEANDER_WIDTH = 7.0     # X span of each U from arm spine left edge [mm]  (< SC_STUB_LENGTH)
 MEANDER_V_GAP = 4.0    # open vertical gap inside each U [mm]       ← medium frequency tune
 MEANDER_H_GAP = 4.0     # spine segment between consecutive Us [mm]  (only matters if N > 1)
-TAIL_LENGTH   = 16.7     # spine after last U [mm]                    ← fine frequency tune
+TAIL_LENGTH   = 16.4     # spine after last U [mm]                    ← fine frequency tune
 
 # ═══════════════════════════════════════════════════════════════════════
 # DERIVED POSITIONS  (do not edit)
