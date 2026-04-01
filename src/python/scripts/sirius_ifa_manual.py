@@ -30,25 +30,25 @@ class IFASimulation:
 
     # ── Stub dimensions ────────────────────────────────────────────────
     SC_STUB_LENGTH_MM = 12.0      # arm spine x = GND_X - this
-    SC_TRACE_WIDTH_MM = 1.0
-    FEED_TRACE_WIDTH_MM = 0.5
-    FEED_SEPARATION_MM = 0.3      # ← IMPEDANCE TUNE
-    ARM_TRACE_WIDTH_MM = 1.0
+    SC_TRACE_WIDTH_MM = 2.4
+    FEED_TRACE_WIDTH_MM = 0.2
+    FEED_SEPARATION_MM = 1.0      # ← IMPEDANCE TUNE
+    ARM_TRACE_WIDTH_MM = 2.4
     PORT_WIDTH_MM = 0.5           # fixed — do not change
 
     # ── Meander arm ────────────────────────────────────────────────────
-    N_MEANDERS = 2                # ← PRIMARY FREQUENCY TUNE
-    INIT_LENGTH_MM = 10.0
-    MEANDER_WIDTH_MM = 7.0        # must be < SC_STUB_LENGTH_MM
-    MEANDER_V_GAP_MM = 4.0        # ← MEDIUM FREQUENCY TUNE
+    N_MEANDERS = 0                # ← PRIMARY FREQUENCY TUNE
+    INIT_LENGTH_MM = 20.0
+    MEANDER_WIDTH_MM = 6.0        # must be < SC_STUB_LENGTH_MM
+    MEANDER_V_GAP_MM = 6.0        # ← MEDIUM FREQUENCY TUNE
     MEANDER_H_GAP_MM = 4.0        # only used when N_MEANDERS > 1
-    TAIL_LENGTH_MM = 16.3         # ← FINE FREQUENCY TUNE
+    TAIL_LENGTH_MM = 32.5         # ← FINE FREQUENCY TUNE
 
     # ── Solver ─────────────────────────────────────────────────────────
-    MAX_TIMESTEPS = 120_000
+    MAX_TIMESTEPS = 100_000
     MAX_TIME_S = 150.0
     END_CRITERIA = 1e-4
-    FIELD_DUMP_SUBSAMPLE = [1, 1, 1]  # spatial subsampling for Et dump
+    FIELD_DUMP_SUBSAMPLE = [2, 2, 2]  # spatial subsampling for Et dump
 
     # ── Export ─────────────────────────────────────────────────────────
     FAR_FIELD_RADIUS_MM = 150.0
