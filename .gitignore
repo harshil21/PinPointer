@@ -53,6 +53,7 @@ _autosave-*
 fp-info-cache
 ~*.lck
 \#auto_saved_files#
+kicad/.history
 
 # Netlist files (exported from Eeschema)
 *.net
