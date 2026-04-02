@@ -24,6 +24,15 @@ class IFASimulation:
     SUBSTRATE_LOSS_TANGENT = 0.015
     COPPER_EDGE_INSET_MM = 0.2  # all copper planes inset from PCB edge
 
+    # ── PCB stackup (4-layer, thicknesses from KiCAD) ─────────────────
+    F_CU_THICKNESS_MM = 0.035  # L1 top copper
+    PREPREG_1_THICKNESS_MM = 0.2104  # between L1 and L2
+    GND_CU_THICKNESS_MM = 0.0152  # L2 GND copper
+    CORE_THICKNESS_MM = 1.065  # between L2 and L3
+    PWR_CU_THICKNESS_MM = 0.0152  # L3 PWR copper (not modelled — split plane)
+    PREPREG_3_THICKNESS_MM = 0.2104  # between L3 and L4
+    B_CU_THICKNESS_MM = 0.035  # L4 bottom copper
+
     # ── Keepout strip (left edge — no GND copper) ──────────────────────
     KEEPOUT_WIDTH_MM = 13.18
     TOP_MARGIN_MM = 2.0
@@ -91,7 +100,7 @@ class IFASimulation:
     ]
 
     # ── Solver ─────────────────────────────────────────────────────────
-    MAX_TIMESTEPS = 100_000
+    MAX_TIMESTEPS = 200_000
     MAX_TIME_S = 150.0
     END_CRITERIA = 1e-4
     FIELD_DUMP_SUBSAMPLE = [2, 2, 2]  # spatial subsampling for Et dump
@@ -127,6 +136,13 @@ class IFASimulation:
         self.MESH_RES_MM = (
             C0 / (self.CENTER_FREQUENCY_HZ + self.BANDWIDTH_HZ) / 1e-3 / 20
         )
+
+        # Internal copper layer z-positions (measured from board bottom = 0)
+        self.Z_L2_GND_MM = (
+            self.BOARD_THICKNESS_MM
+            - self.F_CU_THICKNESS_MM
+            - self.PREPREG_1_THICKNESS_MM
+        )  # ≈ 1.355 mm
 
         # openEMS objects — populated by setup() and build_geometry()
         self.FDTD: openEMS | None = None
@@ -226,15 +242,33 @@ class IFASimulation:
     def _add_ground_plane(self) -> None:
         gnd = self.CSX.AddMetal("ground_plane")
         inset = self.COPPER_EDGE_INSET_MM
+
+        # Common GND extents (keepout on left for antenna, inset on other edges)
+        gnd_x0 = self.GND_X_MM
+        gnd_y0 = -self.BOARD_LENGTH_MM / 2 + inset
+        gnd_x1 = self.BOARD_WIDTH_MM / 2 - inset
+        gnd_y1 = self.BOARD_LENGTH_MM / 2 - inset
+
+        # L1 — top GND pour (F.Cu), keepout left of GND_X for the antenna
         gnd.AddBox(
-            [self.GND_X_MM, -self.BOARD_LENGTH_MM / 2 + inset, self.BOARD_THICKNESS_MM],
-            [
-                self.BOARD_WIDTH_MM / 2 - inset,
-                self.BOARD_LENGTH_MM / 2 - inset,
-                self.BOARD_THICKNESS_MM,
-            ],
+            [gnd_x0, gnd_y0, self.BOARD_THICKNESS_MM],
+            [gnd_x1, gnd_y1, self.BOARD_THICKNESS_MM],
             priority=10,
         )
+
+        # # L2 — solid GND plane (same keepout as top to avoid detuning antenna)
+        # gnd.AddBox(
+        #     [gnd_x0, gnd_y0, self.Z_L2_GND_MM],
+        #     [gnd_x1, gnd_y1, self.Z_L2_GND_MM],
+        #     priority=10,
+        # )
+
+        # # L4 — bottom GND pour (B.Cu, same keepout boundary)
+        # gnd.AddBox(
+        #     [gnd_x0, gnd_y0, 0],
+        #     [gnd_x1, gnd_y1, 0],
+        #     priority=10,
+        # )
 
     def _add_vias(self) -> None:
         """Add stitching vias as metal cylinders from z=0 to z=BOARD_THICKNESS_MM."""
@@ -357,7 +391,20 @@ class IFASimulation:
         self.mesh.AddLine("x", [-100, 100])
         self.mesh.AddLine("y", [-100, 100])
         self.mesh.AddLine("z", [-100, 100])
+        # Below line is for 1 layer sim:
         self.mesh.AddLine("z", np.linspace(0, self.BOARD_THICKNESS_MM, 6))
+
+        # Substrate z-mesh: resolve internal copper layers.
+        # Thin prepreg between L1 and L2 (≈0.245 mm) needs several cells;
+        # thicker core below L2 can be coarser.
+        # z_sub = sorted(
+        #     set(
+        #         np.linspace(0, self.Z_L2_GND_MM, 10).tolist()
+        #         + np.linspace(self.Z_L2_GND_MM, self.BOARD_THICKNESS_MM, 4).tolist()
+        #     )
+        # )
+        # self.mesh.AddLine("z", z_sub)
+
         self.mesh.AddLine("x", SmoothMeshLines(sorted(set(self._edge_x)), 0.5))
         self.mesh.AddLine("y", SmoothMeshLines(sorted(set(self._edge_y)), 0.5))
         self.mesh.SmoothMeshLines("all", self.MESH_RES_MM, 1.4)
