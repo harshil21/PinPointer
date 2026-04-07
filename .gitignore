@@ -25,7 +25,7 @@ kicad/**/*.zip
 kicad/**/*.kicad_prl
 kicad/**/*.bak
 kicad/**/*.kicad_sch-bak
-kicad/.kinotes/backups/
+kicad/**/.kinotes/backups/
 
 # Added by cargo
 
@@ -54,7 +54,7 @@ _autosave-*
 fp-info-cache
 ~*.lck
 \#auto_saved_files#
-kicad/.history
+kicad/**/.history
 
 # Netlist files (exported from Eeschema)
 *.net
