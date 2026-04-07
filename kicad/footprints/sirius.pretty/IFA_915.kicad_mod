@@ -3,11 +3,12 @@
 	(generator "pcbnew")
 	(generator_version "10.0")
 	(layer "F.Cu")
+	(descr "IFA antenna + 4mm length")
 	(property "Reference" "REF**"
 		(at 0 -4.8 0)
 		(unlocked yes)
 		(layer "F.SilkS")
-		(uuid "ecd24d45-062c-4435-943f-936dc102a081")
+		(uuid "05727ead-270c-45fc-8085-846f60d97540")
 		(effects
 			(font
 				(size 1 1)
@@ -19,7 +20,7 @@
 		(at 0 1 0)
 		(unlocked yes)
 		(layer "F.Fab")
-		(uuid "4ddb0610-ad5d-4520-9fff-57c16dbea167")
+		(uuid "b4927d67-4f3d-466c-8c08-8534f4a8fa31")
 		(effects
 			(font
 				(size 1 1)
@@ -32,7 +33,7 @@
 		(unlocked yes)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "25c067a9-4ae7-497d-bd3d-533da3ac9385")
+		(uuid "b28a5ddf-ca90-4ac0-9c49-35d6cfe56f09")
 		(effects
 			(font
 				(size 1 1)
@@ -45,7 +46,7 @@
 		(unlocked yes)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "145192d6-c611-45e5-aabd-0898270c8c6e")
+		(uuid "55d1f5c7-093e-4576-acfe-c6a7ca8ad0ad")
 		(effects
 			(font
 				(size 1 1)
@@ -57,109 +58,21 @@
 	(net_tie_pad_groups "1 2")
 	(duplicate_pad_numbers_are_jumpers no)
 	(fp_rect
-		(start -6 -0.5)
-		(end -5 10.5)
+		(start -6 1.2)
+		(end -3.6 57.7)
 		(stroke
 			(width 0)
 			(type solid)
 		)
 		(fill yes)
 		(layer "F.Cu")
-		(uuid "15887089-a094-42b2-9676-b98685c76389")
-	)
-	(fp_rect
-		(start -6 10.5)
-		(end 1 11.5)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(fill yes)
-		(layer "F.Cu")
-		(uuid "fb541ed0-415d-40f3-a62e-618e37e2a732")
-	)
-	(fp_rect
-		(start -6 15.5)
-		(end 1 16.5)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(fill yes)
-		(layer "F.Cu")
-		(uuid "9bc719d8-95f1-43a9-9eef-2de1d26e7642")
-	)
-	(fp_rect
-		(start -6 16.5)
-		(end -5 20.5)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(fill yes)
-		(layer "F.Cu")
-		(uuid "9063a8c8-4456-4c26-ad1e-b1e62081706f")
-	)
-	(fp_rect
-		(start -6 20.5)
-		(end 1 21.5)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(fill yes)
-		(layer "F.Cu")
-		(uuid "85712ceb-cf1d-42a1-bc07-8336fedfc01b")
-	)
-	(fp_rect
-		(start -6 25.5)
-		(end 1 26.5)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(fill yes)
-		(layer "F.Cu")
-		(uuid "93698ff5-82d7-4e17-b2e0-ec8b1442bc96")
-	)
-	(fp_rect
-		(start -6 26.5)
-		(end -5 44.8)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(fill yes)
-		(layer "F.Cu")
-		(uuid "686f59a8-cef3-4620-8278-ac8c274a43f8")
-	)
-	(fp_rect
-		(start 0 11.5)
-		(end 1 15.5)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(fill yes)
-		(layer "F.Cu")
-		(uuid "17b6ada9-07d7-42ec-adb3-7afd94ddad6b")
-	)
-	(fp_rect
-		(start 0 21.5)
-		(end 1 25.5)
-		(stroke
-			(width 0)
-			(type solid)
-		)
-		(fill yes)
-		(layer "F.Cu")
-		(uuid "3ff755ea-9e8a-4e1c-869b-e9c10ec9a774")
+		(uuid "52ab7e0d-4f10-4ba2-b955-ab4c1e456400")
 	)
 	(fp_text user "${REFERENCE}"
 		(at 0 2.5 0)
 		(unlocked yes)
 		(layer "F.Fab")
-		(uuid "f17628a2-63e1-42a1-ab6b-084d5626a2d6")
+		(uuid "c0155af8-e9f1-43cd-b7af-07380428d2d2")
 		(effects
 			(font
 				(size 1 1)
@@ -169,7 +82,7 @@
 	)
 	(pad "1" smd custom
 		(at 0 0)
-		(size 12 1)
+		(size 12 2.4)
 		(layers "F.Cu")
 		(solder_mask_margin 0)
 		(clearance 0)
@@ -178,11 +91,11 @@
 			(anchor rect)
 		)
 		(primitives)
-		(uuid "cbb12da4-4a4b-4256-ad20-bf06caaf3db4")
+		(uuid "51c54212-e61d-4371-bcfc-16ea7b3da0ce")
 	)
 	(pad "2" smd custom
-		(at 0 1.05)
-		(size 12 0.5)
+		(at 0 2.3)
+		(size 12 0.2)
 		(layers "F.Cu")
 		(solder_mask_margin 0)
 		(clearance 0)
@@ -191,7 +104,7 @@
 			(anchor rect)
 		)
 		(primitives)
-		(uuid "87bec31b-6aa2-4118-b3fe-1918e6ffd58a")
+		(uuid "57fd4b43-b215-4daa-a2c1-146e53df3fe1")
 	)
 	(embedded_fonts no)
 )

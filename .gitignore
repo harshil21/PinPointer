@@ -25,6 +25,7 @@ kicad/**/*.zip
 kicad/**/*.kicad_prl
 kicad/**/*.bak
 kicad/**/*.kicad_sch-bak
+kicad/.kinotes/backups/
 
 # Added by cargo
 
@@ -77,3 +78,6 @@ kicad/.history
 
 production/
 bom/
+
+# Python:
+__pycache__
