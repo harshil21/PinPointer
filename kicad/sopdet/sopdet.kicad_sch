@@ -2520,7 +2520,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "sirius:IPEX_MHF1"
+		(symbol "sirius:CONMHF1-SMD-T"
 			(pin_names
 				(offset 1.016)
 			)
@@ -2530,7 +2530,7 @@
 			(in_pos_files yes)
 			(duplicate_pin_numbers_are_jumpers no)
 			(property "Reference" "J"
-				(at -0.762 1.524 0)
+				(at -1.27 1.524 0)
 				(show_name no)
 				(do_not_autoplace no)
 				(effects
@@ -2540,8 +2540,8 @@
 					(justify left bottom)
 				)
 			)
-			(property "Value" "IPEX_MHF1"
-				(at -4.318 -9.906 0)
+			(property "Value" "CONMHF1-SMD-T"
+				(at -1.524 -6.858 0)
 				(show_name no)
 				(do_not_autoplace no)
 				(effects
@@ -2551,8 +2551,8 @@
 					(justify left bottom)
 				)
 			)
-			(property "Footprint" "sirius:ipex_mhf1"
-				(at -0.762 3.556 0)
+			(property "Footprint" "sirius:TE_CONMHF1-SMD-T"
+				(at 0 0 0)
 				(show_name no)
 				(do_not_autoplace no)
 				(hide yes)
@@ -2585,10 +2585,10 @@
 					)
 				)
 			)
-			(symbol "IPEX_MHF1_0_0"
+			(symbol "CONMHF1-SMD-T_0_0"
 				(polyline
 					(pts
-						(xy -1.016 -1.016) (xy 0 -1.016)
+						(xy 1.524 -1.016) (xy 3.556 -1.016)
 					)
 					(stroke
 						(width 0.254)
@@ -2600,44 +2600,8 @@
 				)
 				(polyline
 					(pts
-						(xy -0.762 -6.477) (xy -1.27 -7.239)
+						(xy 1.778 -3.302) (xy 1.27 -4.064)
 					)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start -0.635 0.635)
-					(mid -0.0027 0)
-					(end -0.635 -0.635)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start -0.635 -1.905)
-					(mid -0.0027 -2.54)
-					(end -0.635 -3.175)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(arc
-					(start -0.6323 -4.445)
-					(mid 0 -5.08)
-					(end -0.6323 -5.715)
 					(stroke
 						(width 0.254)
 						(type default)
@@ -2647,7 +2611,7 @@
 					)
 				)
 				(circle
-					(center 0 0)
+					(center 2.54 0)
 					(radius 1.016)
 					(stroke
 						(width 0.254)
@@ -2659,19 +2623,7 @@
 				)
 				(polyline
 					(pts
-						(xy 0 -1.016) (xy 0 -3.302)
-					)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0 -1.016) (xy 1.016 -1.016)
+						(xy 2.54 -1.016) (xy 2.54 -3.302)
 					)
 					(stroke
 						(width 0.254)
@@ -2682,7 +2634,7 @@
 					)
 				)
 				(circle
-					(center 0 -2.54)
+					(center 2.54 -2.54)
 					(radius 0.254)
 					(stroke
 						(width 0.254)
@@ -2694,7 +2646,7 @@
 				)
 				(polyline
 					(pts
-						(xy 0 -3.302) (xy -0.762 -3.302)
+						(xy 2.54 -3.302) (xy 2.032 -4.064)
 					)
 					(stroke
 						(width 0.254)
@@ -2706,7 +2658,7 @@
 				)
 				(polyline
 					(pts
-						(xy 0 -3.302) (xy 0.762 -3.302)
+						(xy 3.302 -3.302) (xy 1.778 -3.302)
 					)
 					(stroke
 						(width 0.254)
@@ -2718,7 +2670,7 @@
 				)
 				(polyline
 					(pts
-						(xy 0 -6.477) (xy 0 -6.477) (xy -0.508 -7.239)
+						(xy 3.302 -3.302) (xy 2.794 -4.064)
 					)
 					(stroke
 						(width 0.254)
@@ -2728,20 +2680,50 @@
 						(type none)
 					)
 				)
-				(polyline
-					(pts
-						(xy 0.762 -6.477) (xy 0.254 -7.239)
-					)
+				(rectangle
+					(start 4.1275 -0.3175)
+					(end 6.0325 0.3175)
 					(stroke
-						(width 0.254)
+						(width 0.1)
 						(type default)
 					)
 					(fill
-						(type none)
+						(type outline)
 					)
 				)
+				(rectangle
+					(start 4.1275 -2.8575)
+					(end 6.0325 -2.2225)
+					(stroke
+						(width 0.1)
+						(type default)
+					)
+					(fill
+						(type outline)
+					)
+				)
+			)
+			(symbol "CONMHF1-SMD-T_1_0"
 				(pin passive line
-					(at 5.08 -2.54 180)
+					(at 7.62 0 180)
+					(length 5.08)
+					(name ""
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.016 1.016)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 7.62 -2.54 180)
 					(length 5.08)
 					(name ""
 						(effects
@@ -2758,9 +2740,10 @@
 						)
 					)
 				)
-				(pin passive line
-					(at 5.08 -5.08 180)
+				(pin power_in line
+					(at 7.62 -2.54 180)
 					(length 5.08)
+					(hide yes)
 					(name ""
 						(effects
 							(font
@@ -2776,37 +2759,10 @@
 						)
 					)
 				)
-			)
-			(symbol "IPEX_MHF1_0_1"
-				(polyline
-					(pts
-						(xy 0 -1.27) (xy 0 -5.08) (xy 0 -6.35)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0 -3.81) (xy 0 -3.81)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "IPEX_MHF1_1_0"
-				(pin passive line
-					(at 5.08 0 180)
+				(pin power_in line
+					(at 7.62 -2.54 180)
 					(length 5.08)
+					(hide yes)
 					(name ""
 						(effects
 							(font
@@ -2814,7 +2770,7 @@
 							)
 						)
 					)
-					(number "1"
+					(number "4"
 						(effects
 							(font
 								(size 1.016 1.016)
@@ -5026,12 +4982,6 @@
 		(uuid "f2006595-3716-49b2-9ad2-f103d1f2af2a")
 	)
 	(junction
-		(at 123.19 223.52)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "074ccbd4-3e99-4efe-8e2b-186de3173be5")
-	)
-	(junction
 		(at 209.55 210.82)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5246,12 +5196,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "b3b0fb1a-8c7a-47fb-a892-5901e920f64b")
-	)
-	(junction
-		(at 29.21 181.61)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "bc401382-9c97-473f-b8c4-02498abe3158")
 	)
 	(junction
 		(at 392.43 209.55)
@@ -5609,7 +5553,7 @@
 	)
 	(wire
 		(pts
-			(xy 123.19 220.98) (xy 123.19 223.52)
+			(xy 123.19 220.98) (xy 123.19 231.14)
 		)
 		(stroke
 			(width 0)
@@ -6729,16 +6673,6 @@
 	)
 	(wire
 		(pts
-			(xy 123.19 223.52) (xy 123.19 231.14)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "eb60eda9-a303-4500-bed0-9826ce5a4ddc")
-	)
-	(wire
-		(pts
 			(xy 392.43 219.71) (xy 384.81 219.71)
 		)
 		(stroke
@@ -7262,8 +7196,8 @@
 		)
 	)
 	(symbol
-		(lib_id "sirius:IPEX_MHF1")
-		(at 24.13 176.53 0)
+		(lib_id "sirius:CONMHF1-SMD-T")
+		(at 21.59 176.53 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -7273,7 +7207,7 @@
 		(dnp no)
 		(uuid "013a25cb-8122-4871-a6e8-582192dbbcf1")
 		(property "Reference" "J1"
-			(at 24.13 171.45 0)
+			(at 24.384 171.45 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -7283,7 +7217,7 @@
 			)
 		)
 		(property "Value" "IPEX_MHF1"
-			(at 24.13 173.482 0)
+			(at 24.892 173.482 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -7292,8 +7226,8 @@
 				)
 			)
 		)
-		(property "Footprint" "sirius:ipex_mhf1"
-			(at 23.368 172.974 0)
+		(property "Footprint" "sirius:TE_CONMHF1-SMD-T"
+			(at 21.59 176.53 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7305,7 +7239,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 24.13 176.53 0)
+			(at 21.59 176.53 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7316,7 +7250,18 @@
 			)
 		)
 		(property "Description" ""
-			(at 24.13 176.53 0)
+			(at 21.59 176.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "343-CONMHF1-SMD-TCT-ND"
+			(at 21.59 176.53 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7334,6 +7279,9 @@
 		)
 		(pin "3"
 			(uuid "81656cef-2d0d-4ac7-88aa-c5d07e3ec58a")
+		)
+		(pin "4"
+			(uuid "ecdc266c-e6e5-4dcf-815a-175a238ba13e")
 		)
 		(instances
 			(project "sopdet"
@@ -7400,6 +7348,17 @@
 		)
 		(property "Description" "Resistor, small symbol"
 			(at 255.27 181.61 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "RMCF0603FT1K00CT-ND"
+			(at 255.27 181.61 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7559,6 +7518,17 @@
 			)
 		)
 		(property "Description" "Resistor, small symbol"
+			(at 137.16 198.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "311-0.0GRCT-ND"
 			(at 137.16 198.12 0)
 			(hide yes)
 			(show_name no)
@@ -7873,6 +7843,17 @@
 		)
 		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 203.2 156.21 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "399-C0603C104K3RACTUCT-ND"
+			(at 203.2 156.21 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8315,6 +8296,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "490-1427-1-ND"
+			(at 137.16 208.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "7ad5f5e5-d372-4aaf-8ebc-c713dae3b479")
 		)
@@ -8396,6 +8388,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "311-5.60KHRCT-ND"
+			(at 248.92 184.15 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "0422fd9b-e048-4065-9b09-34b3bfaca425")
 		)
@@ -8467,16 +8470,6 @@
 		(property "Description" "Light emitting diode, small symbol"
 			(at 87.63 36.83 0)
 			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Color" "Red"
-			(at 91.44 38.1 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -8812,6 +8805,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "RMCF0603FT10R0CT-ND"
+			(at 172.72 227.33 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "916589ae-88ec-4941-9149-6023431529e5")
 		)
@@ -9049,6 +9053,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "587-3246-1-ND"
+			(at 92.71 74.93 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "cdd2af10-4c0b-4ea3-8df1-edda08fe517e")
 		)
@@ -9219,16 +9234,6 @@
 				)
 			)
 		)
-		(property "Color" "Green"
-			(at 91.694 47.244 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
 		(property "Digikey PN" "LTST-C190GKT"
 			(at 87.63 45.72 0)
 			(hide yes)
@@ -9321,6 +9326,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "565-HHXJ160ARA102MJC5GCT-ND"
+			(at 113.03 39.37 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "0aca0184-c982-49a9-ae2b-703ed07de843")
 		)
@@ -9392,6 +9408,17 @@
 		)
 		(property "Description" "Resistor, small symbol"
 			(at 250.19 207.01 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "RMCF0603FT1K00CT-ND"
+			(at 250.19 207.01 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -9473,6 +9500,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 149.86 229.87 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "399-C0603C104K3RACTUCT-ND"
 			(at 149.86 229.87 0)
 			(hide yes)
 			(show_name no)
@@ -9734,6 +9772,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "RMCF0603FT1K00CT-ND"
+			(at 212.09 198.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "346de991-465f-460c-8aa0-d4d781dbac7b")
 		)
@@ -9805,6 +9854,17 @@
 		)
 		(property "Description" "Resistor, small symbol"
 			(at 259.08 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "RMCF0603FT1K00CT-ND"
+			(at 259.08 220.98 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -10120,6 +10180,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 85.09 74.93 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "587-3246-1-ND"
 			(at 85.09 74.93 0)
 			(hide yes)
 			(show_name no)
@@ -10937,6 +11008,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "RMCF0603FT30K1CT-ND"
+			(at 74.93 81.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "5548e2b0-8b65-4a64-8405-dac47d3c4aa8")
 		)
@@ -11191,6 +11273,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "1276-1037-1-ND"
+			(at 67.31 74.93 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "a58f3346-77b2-4186-aeb7-f95da4ed7d00")
 		)
@@ -11262,6 +11355,17 @@
 			)
 		)
 		(property "Description" ""
+			(at 179.07 190.5 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "2958-LC29HDAMDCT-ND"
 			(at 179.07 190.5 0)
 			(hide yes)
 			(show_name no)
@@ -11487,6 +11591,17 @@
 			)
 		)
 		(property "Description" "Inductor, small symbol"
+			(at 137.16 222.25 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "490-1178-1-ND"
 			(at 137.16 222.25 0)
 			(hide yes)
 			(show_name no)
@@ -11810,6 +11925,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "587-3258-1-ND"
+			(at 203.2 149.86 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "a21b333e-e0e0-43d1-81cf-de7bc1a689ab")
 		)
@@ -12069,6 +12195,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "1276-1070-1-ND"
+			(at 203.2 162.56 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "070c65c3-8895-4c52-8d9f-5392cc915d23")
 		)
@@ -12140,6 +12277,17 @@
 		)
 		(property "Description" "Resistor, small symbol"
 			(at 40.64 176.53 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "311-0.0GRCT-ND"
+			(at 40.64 176.53 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12309,6 +12457,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "587-3258-1-ND"
+			(at 24.13 71.12 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "4b66cce6-3e5b-4f5e-a3ba-26fa9346ffc8")
 		)
@@ -12459,6 +12618,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 137.16 229.87 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "490-1427-1-ND"
 			(at 137.16 229.87 0)
 			(hide yes)
 			(show_name no)
@@ -12733,150 +12903,6 @@
 				(justify bottom)
 			)
 		)
-		(property "MF" "RF Solutions"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "PACKAGE" "SMD-16 RF Solutions"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "PRICE" "None"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "Package" "Non Standard RF Solutions"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "Check_prices" "https://www.snapeda.com/parts/RFM95W-915S2/RF/view-part/?ref=eda"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "STANDARD" "Manufacturer recommendations"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "SnapEDA_Link" "https://www.snapeda.com/parts/RFM95W-915S2/RF/view-part/?ref=snap"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "MP" "RFM95W-915S2"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "Price" "None"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "Availability" "In Stock"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "AVAILABILITY" "Unavailable"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "Description_1" "802.15.4 LoRa™ Transceiver Module 915MHz Antenna Not Included Surface Mount"
-			(at 73.66 179.07 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
 		(pin "12"
 			(uuid "07be21b4-f675-47ba-984e-1112b3102ef3")
 		)
@@ -13068,6 +13094,17 @@
 		)
 		(property "Description" "Resistor, small symbol"
 			(at 259.08 232.41 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "RMCF0603FT1K00CT-ND"
+			(at 259.08 232.41 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13470,6 +13507,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "311-158KHRCT-ND"
+			(at 74.93 74.93 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "c6714eec-6a68-4e1b-a1ec-cd89f71bf171")
 		)
@@ -13720,8 +13768,8 @@
 		)
 	)
 	(symbol
-		(lib_id "sirius:IPEX_MHF1")
-		(at 118.11 218.44 0)
+		(lib_id "sirius:CONMHF1-SMD-T")
+		(at 115.57 218.44 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -13731,7 +13779,7 @@
 		(dnp no)
 		(uuid "dbed2a46-a84a-4445-b5e2-ef8c2620a448")
 		(property "Reference" "J2"
-			(at 118.11 213.36 0)
+			(at 117.856 213.36 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -13750,8 +13798,8 @@
 				)
 			)
 		)
-		(property "Footprint" "sirius:ipex_mhf1"
-			(at 117.348 214.884 0)
+		(property "Footprint" "sirius:TE_CONMHF1-SMD-T"
+			(at 115.57 218.44 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13763,7 +13811,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 118.11 218.44 0)
+			(at 115.57 218.44 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13774,7 +13822,18 @@
 			)
 		)
 		(property "Description" ""
-			(at 118.11 218.44 0)
+			(at 115.57 218.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "343-CONMHF1-SMD-TCT-ND"
+			(at 115.57 218.44 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13792,6 +13851,9 @@
 		)
 		(pin "3"
 			(uuid "1998cea2-c4ba-489e-b8bf-04df8c6f83d1")
+		)
+		(pin "4"
+			(uuid "e28bd6b3-0ea3-4c96-81e6-4590818ea8f0")
 		)
 		(instances
 			(project "sopdet"
@@ -13944,138 +14006,6 @@
 				(font
 					(size 1.27 1.27)
 				)
-			)
-		)
-		(property "MF" "Raspberry Pi"
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "Description_1" "At the heart of Raspberry Pi Zero 2 W is RP3A0, a custom-built system-in-package designed by Raspberry Pi in the UK."
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "Package" "None"
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "Price" "None"
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "Check_prices" "https://www.snapeda.com/parts/RASPBERRY%20PI%20ZERO%202%20W/Raspberry+Pi/view-part/?ref=eda"
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "STANDARD" "Manufacturer Recommendations"
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "PARTREV" "April 2024"
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "SnapEDA_Link" "https://www.snapeda.com/parts/RASPBERRY%20PI%20ZERO%202%20W/Raspberry+Pi/view-part/?ref=snap"
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "MP" "RASPBERRY PI ZERO 2 W"
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "Availability" "In Stock"
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
-			)
-		)
-		(property "MANUFACTURER" "Raspberry Pi"
-			(at 354.33 184.15 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify bottom)
 			)
 		)
 		(pin "8"
@@ -14341,6 +14271,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 55.88 68.58 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "399-C0603C104K3RACTUCT-ND"
 			(at 55.88 68.58 0)
 			(hide yes)
 			(show_name no)

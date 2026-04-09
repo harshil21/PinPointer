@@ -1,7 +1,7 @@
 [project]
 name = "pinpointer"
 version = "0.1.0"
-description = "Add your description here"
+description = "Personal rocket with GPS RTK + Telemetry"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
     "csxcad",
     "matplotlib",
     "pyqt6",
+    "polars",
 ]
 
 [tool.uv.sources]
