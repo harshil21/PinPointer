@@ -1,0 +1,5 @@
+(version 1)
+(rule no_via_in_pad
+	(constraint disallow via)
+	(condition "A.Pad_Type == 'SMD'")
+)

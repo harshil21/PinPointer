@@ -1,0 +1,111 @@
+(footprint "IFA_915"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(descr "IFA antenna + 4mm length")
+	(property "Reference" "REF**"
+		(at 0 -4.8 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(uuid "fd2cb91a-c1b7-4d1e-b263-5c86706357e3")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+		)
+	)
+	(property "Value" "IFA_915"
+		(at 0 1 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "00806598-a4ca-49f5-bfb8-9b7f6999872d")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "41747762-ac8a-42f3-94e3-9cc8b185c1cc")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "02a022ba-b829-4209-b3bb-3f239366aca5")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(zone_connect 2)
+	(attr smd)
+	(net_tie_pad_groups "1,2")
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_rect
+		(start -6 1.2)
+		(end -3.6 57.7)
+		(stroke
+			(width 0)
+			(type solid)
+		)
+		(fill yes)
+		(layer "F.Cu")
+		(uuid "d3392832-b8cb-44b1-8345-c90d512c1897")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 2.5 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "625cc95a-877e-4bec-ae60-dbca30c4607d")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" smd custom
+		(at 0 0)
+		(size 12 2.4)
+		(layers "F.Cu")
+		(solder_mask_margin 0)
+		(clearance 0)
+		(options
+			(clearance outline)
+			(anchor rect)
+		)
+		(primitives)
+		(uuid "4f8fc2fa-7555-4c2e-8f15-f984d5034a53")
+	)
+	(pad "2" smd custom
+		(at 0 2.3)
+		(size 12 0.2)
+		(layers "F.Cu")
+		(solder_mask_margin 0)
+		(clearance 0)
+		(options
+			(clearance outline)
+			(anchor rect)
+		)
+		(primitives)
+		(uuid "a183ba64-41ed-4b91-b33c-db200aa11cda")
+	)
+	(embedded_fonts no)
+)

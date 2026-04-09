@@ -1,4 +1,0 @@
-(sym_lib_table
-  (version 7)
-  (lib (name "sirius")(type "KiCad")(uri "${KIPRJMOD}/symbols/sirius.kicad_sym")(options "")(descr ""))
-)
