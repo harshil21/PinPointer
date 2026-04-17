@@ -81,3 +81,10 @@ bom/
 
 # Python:
 __pycache__
+
+# openEMS simulation results
+src/python/scripts/manual_sim/*
+src/python/scripts/yagi_sim/*
+
+# Public simulation results (TODO: actually not ignore this)
+sims/
