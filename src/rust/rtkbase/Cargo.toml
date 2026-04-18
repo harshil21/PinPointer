@@ -1,0 +1,8 @@
+[package]
+name = "rtkbase"
+version = "0.1.0"
+edition = "2024"
+description = "RTK Base Station code"
+
+[dependencies]
+serialport = { version = "4.7.3", default-features = false }
