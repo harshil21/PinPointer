@@ -1,6 +1,7 @@
 [workspace]
 members = [
-    "src/rust/pinpointer",
-    "src/rust/ground_station"
+    "src/rust/sirius",
+    "src/rust/sopdet",
+    "src/rust/rtkbase",
 ]
 resolver = "3"
