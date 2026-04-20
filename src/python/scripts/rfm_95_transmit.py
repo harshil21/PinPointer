@@ -4,15 +4,15 @@ import time
 from adafruit_rfm import rfm9x
 
 
-RADIO_FREQ_MHZ = 915.0
+RADIO_FREQ_MHZ = 915
 
 # SPI setup
 reset = digitalio.DigitalInOut(board.D17)  # RESET
 
-rfm = rfm9x.RFM9x(915, reset, baudrate=1_000_000)  # e.g., 915 MHz for US/AU
+rfm = rfm9x.RFM9x(RADIO_FREQ_MHZ, reset, baudrate=1_000_000)  # e.g., 915 MHz for US/AU
 rfm.tx_power = 13  # Transmit power in dBm (5-23)
 rfm.spreading_factor = 7  # 6-12
-rfm.signal_bandwidth = 125000  # Bandwidth in Hz
+rfm.signal_bandwidth = 500_000  # Bandwidth in Hz
 
 # Sender mode (run on one Pi)
 def send_message():

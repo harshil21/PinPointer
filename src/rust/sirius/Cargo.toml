@@ -1,9 +1,9 @@
 [package]
-name = "pinpointer"
+name = "sirius"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 crossterm = "0.29.0"
 nmea = { version = "0.7.0", features = ["default"]}
-serialport = "4.7.3"
+serialport = { version = "4.7.3", default-features = false }

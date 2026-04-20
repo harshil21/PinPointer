@@ -3,7 +3,7 @@ import digitalio
 import time
 from adafruit_rfm import rfm9x  # Your modified library
 
-RADIO_FREQ_MHZ = 915.0
+RADIO_FREQ_MHZ = 915
 
 # Reset pin setup (same as transmitter)
 reset = digitalio.DigitalInOut(board.D17)  # RESET on GPIO17 (physical pin 11)
@@ -18,7 +18,7 @@ rfm = rfm9x.RFM9x(
 )
 rfm.tx_power = 13                # Not needed for RX, but for consistency
 rfm.spreading_factor = 7         # Match transmitter
-rfm.signal_bandwidth = 125000    # Match transmitter
+rfm.signal_bandwidth = 500_000    # Match transmitter
 
 # Receiver mode
 def receive_message():
