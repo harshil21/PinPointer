@@ -2,6 +2,7 @@
 members = [
     "src/rust/sirius",
     "src/rust/sopdet",
-    "src/rust/rtkbase",
+    "src/rust/rtk",
+    "src/rust/rfm95"
 ]
 resolver = "3"

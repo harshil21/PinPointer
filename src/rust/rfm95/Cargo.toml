@@ -1,0 +1,15 @@
+[package]
+name = "rfm95"
+version = "0.1.0"
+edition = "2024"
+description = "Linux SPI driver for the RFM95W/SX1276 LoRa radio module"
+
+[dependencies]
+spidev = "0.6"
+gpio-cdev = "0.6"
+thiserror = "2"
+log = "0.4"
+bitflags = "2"
+
+[dev-dependencies]
+env_logger = "0.11"

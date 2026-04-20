@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 serialport = { version = "4.7.3", default-features = false }
+rfm95 = { path = "../rfm95" }
