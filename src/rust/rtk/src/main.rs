@@ -1,9 +1,9 @@
 /// This file is just for testing the rtkbase crate.
 ///
-use rtkbase;
-use rtkbase::port::BaseGPS;
-use rtkbase::protocol::pair::{PairRTCMSetOutputMode, RtcmMode};
-use rtkbase::protocol::response::WireMessage;
+use rtk;
+use rtk::port::BaseGPS;
+use rtk::protocol::pair::{PairRTCMSetOutputMode, RtcmMode};
+use rtk::protocol::response::WireMessage;
 use std::path::PathBuf;
 
 fn test_reading_sentences() {

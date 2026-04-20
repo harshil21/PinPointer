@@ -15,7 +15,7 @@ use rfm95::{
 /// Adjust these to match your wiring.
 const SPI_DEVICE: &str = "/dev/spidev0.0";
 const GPIO_CHIP: &str = "/dev/gpiochip0";
-const RESET_PIN: u32 = 25;
+const RESET_PIN: u32 = 17;
 const DIO0_PIN: u32 = 24;
 
 fn main() -> rfm95::Result<()> {
@@ -32,12 +32,13 @@ fn main() -> rfm95::Result<()> {
 
     let config = LoraConfig {
         frequency: 915_000_000,
-        bandwidth: Bandwidth::Bw125kHz,
+        bandwidth: Bandwidth::Bw500kHz,
         spreading_factor: SpreadingFactor::Sf7,
         coding_rate: CodingRate::Cr4_5,
+        header_mode: rfm95::HeaderMode::Explicit,
         pa_config: PaConfig {
             pa_select: PaSelect::PaBoost,
-            output_power: 17,
+            output_power: 20,
         },
         ..LoraConfig::default()
     };
