@@ -8,13 +8,13 @@ dependencies = [
     "adafruit-circuitpython-rfm>=1.0.7",
 	# "paramiko>=4.0.0",
 	# k"pygpsclient>=1.5.13",
-	# "rpi-gpio>=0.7.1",
+    "rpi-gpio>=0.7.1",
     "spidev>=3.8",
-    "openems",
-    "csxcad",
-    "matplotlib",
-    "pyqt6",
-    "polars",
+    "openems; platform_machine=='x86_64'",
+    "csxcad; platform_machine=='x86_64'",
+    "matplotlib; platform_machine=='x86_64'",
+    "pyqt6; platform_machine=='x86_64'",
+    "polars; platform_machine=='x86_64'",
 ]
 
 [tool.uv.sources]
