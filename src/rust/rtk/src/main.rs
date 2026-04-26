@@ -22,6 +22,9 @@ fn test_reading_sentences() {
                 WireMessage::PairMessage(pair) => {
                     println!("Received PAIR Message: {:?}", pair);
                 }
+                WireMessage::NmeaGga(gga) => {
+                    println!("Received GGA: {:?}", gga);
+                }
             }
         }
         count += 1;

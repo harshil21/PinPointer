@@ -3,7 +3,37 @@ name = "sirius"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "sirius"
+path = "src/main.rs"
+
 [dependencies]
-crossterm = "0.29.0"
-nmea = { version = "0.7.0", features = ["default"]}
-serialport = { version = "4.7.3", default-features = false }
+# Shared telemetry protocol (also used by sopdet)
+protocol = { path = "../protocol" }
+
+# FIRM IMU library
+firm_rust  = "1.2.1"
+firm_core  = "1.2.1"
+
+# LoRa radio driver
+rfm95 = { path = "../rfm95" }
+
+# GPS / RTK module
+rtk = { path = "../rtk" }
+
+# GPIO (same version already used by rfm95)
+gpio-cdev = "0.6"
+
+# Hardware PWM (GPIO 18 / PWM0 on Raspberry Pi)
+rppal = "0.19"
+
+# Error handling
+anyhow = "1"
+
+# Logging
+log        = "0.4"
+env_logger = "0.11"
+
+# CSV flight log
+csv   = "1"
+serde = { version = "1", features = ["derive"] }

@@ -50,6 +50,12 @@ impl BaseGPS {
         self.stream_rx.as_ref()?.recv_timeout(timeout).ok()
     }
 
+    /// Non-blocking: returns the next GPS data message if one is available,
+    /// or None if the queue is empty.
+    pub fn try_get_gps_data(&mut self) -> Option<WireMessage> {
+        self.stream_rx.as_ref()?.try_recv().ok()
+    }
+
     /// Pops the next available RTCM message from the internal buffer, if any.
     /// Use this to get RTCM correction data that can be uploaded to NTRIP caster.
     pub fn get_rtcm_data(&mut self, timeout: Duration) -> Option<RTCMMessage> {
