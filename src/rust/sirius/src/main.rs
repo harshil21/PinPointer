@@ -44,7 +44,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use time::{OffsetDateTime, UtcOffset};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Context;
 use gpio_cdev::{Chip, LineRequestFlags};
@@ -71,9 +72,9 @@ const GPIO_CONTINUITY: u32 = 27;
 const GPIO_RFM95_RESET: u32 = 17;
 const GPIO_RFM95_DIO0: u32 = 25;
 
-const FIRM_PORT: &str = "/dev/ttyUSB0";
+const FIRM_PORT: &str = "/dev/ttyACM0";
 const FIRM_BAUD: u32 = 2_000_000;
-const GPS_PORT: &str = "/dev/ttyAMA0";
+const GPS_PORT: &str = "/dev/serial0";
 const SPI_PATH: &str = "/dev/spidev0.0";
 
 /// Duration the pyro GPIO pin is held HIGH to fire the ejection charge.
@@ -87,11 +88,12 @@ fn main() -> anyhow::Result<()> {
 
     let boot = Instant::now();
 
-    let boot_unix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let log_path = format!("sirius_log_{}.csv", boot_unix);
+    let dt = OffsetDateTime::now_utc();
+    let local = dt.to_offset(UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC));
+
+    let fmt = time::format_description::parse("[hour]_[minute]_[second]").unwrap();
+    let hh_mm_ss = local.format(&fmt).unwrap();
+    let log_path = format!("logs/sirius_log_{}.csv", hh_mm_ss);
 
     log::info!("╔══════════════════════════════════════╗");
     log::info!("║   Sirius Flight Computer — Startup   ║");
@@ -129,27 +131,48 @@ fn main() -> anyhow::Result<()> {
     let logger =
         Logger::new(&log_path).with_context(|| format!("Cannot open flight log '{}'", log_path))?;
 
-    let mut firm_client = FIRMClient::new(FIRM_PORT, FIRM_BAUD, 0.1)
-        .with_context(|| format!("Cannot open FIRM IMU on '{}'", FIRM_PORT))?;
-    firm_client.start();
-    log::info!("FIRM IMU — {} @ {} baud", FIRM_PORT, FIRM_BAUD);
+    let mut firm_client = match FIRMClient::new(FIRM_PORT, FIRM_BAUD, 0.1) {
+        Ok(mut client) => {
+            client.start();
+            log::info!("FIRM IMU — {} @ {} baud", FIRM_PORT, FIRM_BAUD);
+            Some(client)
+        }
+        Err(e) => {
+            log::warn!("Cannot open FIRM IMU on '{}': {}", FIRM_PORT, e);
+            None
+        }
+    };
 
-    let mut gps = BaseGPS::open_port(PathBuf::from(GPS_PORT))
-        .with_context(|| format!("Cannot open LC29H GPS on '{}'", GPS_PORT))?;
-    let _gps_reader = gps.start();
-    log::info!("LC29H GPS — {}", GPS_PORT);
+    let mut _gps_reader = None;
+    let mut gps = match BaseGPS::open_port(PathBuf::from(GPS_PORT)) {
+        Ok(mut g) => {
+            _gps_reader = Some(g.start());
+            log::info!("LC29H GPS — {}", GPS_PORT);
+            Some(g)
+        }
+        Err(e) => {
+            log::warn!("Cannot open LC29H GPS on '{}': {}", GPS_PORT, e);
+            None
+        }
+    };
 
-    // The radio is configured inside run_radio_thread (SF7 / BW500).
-    let radio = Rfm95::open(
+    let radio_opt = match Rfm95::open(
         SPI_PATH,
         PinConfig {
             gpio_chip: GPIO_CHIP.to_string(),
             reset_pin: GPIO_RFM95_RESET,
             dio0_pin: Some(GPIO_RFM95_DIO0),
         },
-    )
-    .with_context(|| format!("Cannot open RFM95 on '{}'", SPI_PATH))?;
-    log::info!("RFM95 radio — {} (SF7/BW500)", SPI_PATH);
+    ) {
+        Ok(r) => {
+            log::info!("RFM95 radio — {} (SF7/BW500)", SPI_PATH);
+            Some(r)
+        }
+        Err(e) => {
+            log::warn!("Cannot open RFM95 on '{}': {}", SPI_PATH, e);
+            None
+        }
+    };
 
     // ── Inter-thread channels and atomic flags ────────────────────────────────
 
@@ -171,7 +194,7 @@ fn main() -> anyhow::Result<()> {
     let contact_lost_flag = Arc::new(AtomicBool::new(false));
 
     // ── Spawn radio thread ────────────────────────────────────────────────────
-    {
+    if let Some(radio) = radio_opt {
         let rfd = Arc::clone(&radio_flight_data);
         let ef = Arc::clone(&emergency_flag);
         let df = Arc::clone(&deploy_flag);
@@ -183,6 +206,8 @@ fn main() -> anyhow::Result<()> {
                 run_radio_thread(radio, rfd, rtk_tx, tx_log_tx, rx_log_tx, ef, df, clf, boot)
             })
             .context("Cannot spawn radio thread")?;
+    } else {
+        log::warn!("Radio not connected, skipping radio thread");
     }
 
     log::info!("All subsystems up — entering flight loop");
@@ -200,27 +225,37 @@ fn main() -> anyhow::Result<()> {
         // ── 1. FIRM data ──────────────────────────────────────────────────────
         // get_data_packets blocks up to 10 ms waiting for at least one packet,
         // which naturally throttles the loop to the IMU output rate (~100 Hz).
-        let state_changed = match firm_client.get_data_packets(Some(Duration::from_millis(10))) {
-            Ok(pkts) if !pkts.is_empty() => processor.update(&pkts, &mut flight_data),
-            _ => false,
+        let state_changed = if let Some(client) = firm_client.as_mut() {
+            match client.get_data_packets(Some(Duration::from_millis(10))) {
+                Ok(pkts) if !pkts.is_empty() => processor.update(&pkts, &mut flight_data),
+                _ => false,
+            }
+        } else {
+            std::thread::sleep(Duration::from_millis(10));
+            false
         };
 
         // ── 2. GPS data (non-blocking drain) ─────────────────────────────────
-        while let Some(msg) = gps.try_get_gps_data() {
-            if let WireMessage::NmeaGga(gga) = msg {
-                flight_data.gps_lat = gga.latitude;
-                flight_data.gps_lon = gga.longitude;
-                flight_data.gps_alt_m = gga.altitude_m;
-                flight_data.rtk_fix = gga_fix_to_rtk(gga.fix_quality);
-                flight_data.hdop = gga.hdop;
-                flight_data.satellites_used = gga.satellites_used;
+        if let Some(gps_port) = gps.as_mut() {
+            while let Some(msg) = gps_port.try_get_gps_data() {
+                log::info!("GPS message: {:?}", msg);
+                if let WireMessage::NmeaGga(gga) = msg {
+                    flight_data.gps_lat = gga.latitude;
+                    flight_data.gps_lon = gga.longitude;
+                    flight_data.gps_alt_m = gga.altitude_m;
+                    flight_data.rtk_fix = gga_fix_to_rtk(gga.fix_quality);
+                    flight_data.hdop = gga.hdop;
+                    flight_data.satellites_used = gga.satellites_used;
+                }
             }
         }
 
         // ── 3. RTK injection (Radio → GPS module) ─────────────────────────────
         while let Ok(rtk_bytes) = rtk_rx.try_recv() {
-            if let Err(e) = gps.write_all(&rtk_bytes) {
-                log::warn!("RTK injection write error: {}", e);
+            if let Some(gps_port) = gps.as_mut() {
+                if let Err(e) = gps_port.write_all(&rtk_bytes) {
+                    log::warn!("RTK injection write error: {}", e);
+                }
             }
         }
 
