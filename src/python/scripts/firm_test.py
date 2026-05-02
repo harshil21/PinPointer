@@ -22,7 +22,7 @@ def render_packet(packet) -> str:
 
 
 def main() -> None:
-    port = "COM14"  # Update as needed (e.g., "COM8" or "/dev/ttyACM0")
+    port = "/dev/ttyACM0"  # Update as needed (e.g., "COM8" or "/dev/ttyACM0")
     baud_rate = 2_000_000
 
     with FIRMClient(port, baud_rate, timeout=0.2) as client:
