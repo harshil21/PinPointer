@@ -1,4 +1,7 @@
-use crate::protocol::{pair::{PairResponse}, response::{PQTMResponse, WireMessage}, sentence::Deserialize};
+use crate::protocol::nmea::GgaData;
+use crate::protocol::pair::PairResponse;
+use crate::protocol::response::{PQTMResponse, WireMessage};
+use crate::protocol::sentence::Deserialize;
 
 pub struct PQTMParser {
     incomplete_sentence: String,
@@ -11,68 +14,77 @@ impl PQTMParser {
         }
     }
 
-    /// Parses incoming data for complete $PQTM* sentences.
+    /// Parses incoming data for complete NMEA sentences ($PQTM*, $PAIR*, $xxGGA).
     pub fn parse_data(&mut self, data: &str) -> Vec<WireMessage> {
-        let mut complete_parsed_sentences: Vec<String> = Vec::new();
+        let mut outputs: Vec<WireMessage> = Vec::new();
         let mut buffer = self.incomplete_sentence.clone() + data;
 
-        // Loop to find complete sentences in the buffer. Break when the next sentence is
-        // incomplete.
         loop {
-            let start_index = match buffer.find("$P") {
+            // a. Find the next `$` in the buffer.
+            let start_index = match buffer.find('$') {
                 Some(index) => index,
                 None => {
-                    // No start found, discard buffer
+                    // b. No `$` found: discard buffer and stop.
                     self.incomplete_sentence.clear();
                     break;
                 }
             };
 
-            // Find the end of the sentence:
+            // c. Find `\r\n` after that `$`.
             let end_index = match buffer[start_index..].find("\r\n") {
-                Some(index) => start_index + index + 2, // Include \r\n
+                Some(index) => start_index + index + 2, // points just past `\r\n`
                 None => {
-                    // No end found, store incomplete sentence
+                    // d. No terminator yet: stash the fragment and stop.
                     self.incomplete_sentence = buffer[start_index..].to_string();
                     break;
                 }
             };
 
-            // Extract complete sentence
-            let complete_sentence = &buffer[start_index..end_index];
-            println!("\n\nComplete PQTM sentence: {}", complete_sentence);
-            complete_parsed_sentences.push(complete_sentence.to_string());
+            // e. Extract the complete sentence (without the trailing `\r\n`).
+            let sentence = &buffer[start_index..end_index - 2];
 
-            // Move the buffer forward:
+            // g. Dispatch by sentence type.
+            if sentence.starts_with("$PQTM") {
+                match PQTMResponse::from_sentence(sentence) {
+                    Ok(resp) => {
+                        outputs.push(WireMessage::PQTMMessage(resp));
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Failed to parse PQTM Response: {:?}, Error: {:?}",
+                            sentence, e
+                        );
+                    }
+                }
+            } else if sentence.starts_with("$PAIR") {
+                match PairResponse::from_sentence(sentence) {
+                    Ok(pair) => {
+                        outputs.push(WireMessage::PairMessage(pair));
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Failed to parse PAIR Message: {:?}, Error: {:?}",
+                            sentence, e
+                        );
+                    }
+                }
+            } else if sentence.get(3..6) == Some("GGA") {
+                if let Some(gga) = GgaData::parse(sentence) {
+                    outputs.push(WireMessage::NmeaGga(gga));
+                }
+            }
+            // else: silently skip unrecognised sentences.
+
+            // f. Advance the buffer past `\r\n`.
             buffer = buffer[end_index..].to_string();
         }
 
-        let mut pqtm_outputs: Vec<WireMessage> = Vec::new();
-        
-        for s in &complete_parsed_sentences {
-            if s.starts_with("$PQTM") {
-                let resp = PQTMResponse::from_sentence(&s);
-                match resp {
-                    Err(e) => {
-                        eprintln!("Failed to parse PQTM Response: {:?}, Error: {:?}", s, e);
-                    }
-                    Ok(resp) => {
-                        pqtm_outputs.push(WireMessage::PQTMMessage(resp));
-                    }
-                }
-            } else if s.starts_with("$PAIR") {
-                let resp = PairResponse::from_sentence(&s);
-                match resp {
-                    Err(e) => {
-                        eprintln!("Failed to parse PAIR Message: {:?}, Error: {:?}", s, e);
-                    }
-                    Ok(pair) => {
-                        pqtm_outputs.push(WireMessage::PairMessage(pair));
-                    }
-                }
-            }
+        // Step 3: safety net – if no `$` remains in the buffer, make sure
+        // incomplete_sentence is clear so stale data is not carried forward.
+        if !buffer.contains('$') {
+            self.incomplete_sentence.clear();
         }
-        
-        pqtm_outputs
+
+        outputs
     }
 }

@@ -7,7 +7,7 @@ use rtk::protocol::response::WireMessage;
 use std::path::PathBuf;
 
 fn test_reading_sentences() {
-    let mut rtk = BaseGPS::open_port(PathBuf::from("/dev/ttyUSB0")).unwrap();
+    let mut rtk = BaseGPS::open_port(PathBuf::from("/dev/serial0")).unwrap();
     let _ = rtk.start();
     println!("Opened RTK GPS port successfully.");
     let timeout = std::time::Duration::from_secs(2);
@@ -21,6 +21,9 @@ fn test_reading_sentences() {
                 }
                 WireMessage::PairMessage(pair) => {
                     println!("Received PAIR Message: {:?}", pair);
+                }
+                WireMessage::NmeaGga(gga) => {
+                    println!("Received GGA: {:?}", gga);
                 }
             }
         }
