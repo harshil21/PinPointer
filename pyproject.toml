@@ -9,6 +9,7 @@ dependencies = [
 	# "paramiko>=4.0.0",
 	# k"pygpsclient>=1.5.13",
     "rpi-gpio>=0.7.1",
+    "firm-client",
     "spidev>=3.8",
     "openems; platform_machine=='x86_64'",
     "csxcad; platform_machine=='x86_64'",

@@ -26,6 +26,8 @@ kicad/**/*.kicad_prl
 kicad/**/*.bak
 kicad/**/*.kicad_sch-bak
 kicad/**/.kinotes/backups/
+kicad/**/*.step
+kicad/**/*.stl
 
 # Added by cargo
 
