@@ -355,19 +355,24 @@ fn fire_pyro(pin: &gpio_cdev::LineHandle, data: &mut FlightData, freefall_trigge
 fn update_buzzer(data: &FlightData, emergency: bool, buzzer: &BuzzerController) {
     let desired = if emergency {
         // Emergency takes priority over everything — continuous loud tone.
+        log::info!("Emergency signal active — switching buzzer to EMERGENCY pattern");
         BuzzerPattern::Emergency
     } else if data.flight_state == FlightState::Landed {
         // Beep out the apogee altitude so the recovery team can log it.
+        log::info!("Landed — switching buzzer to APOGEE ANNOUNCE pattern ({} m)", data.apogee_m);
         BuzzerPattern::ApogeeAnnounce(data.apogee_m as u32)
     } else if data.flight_state == FlightState::Standby {
         // On the pad: indicate pyro continuity status.
         if data.pyro_continuity {
+            log::info!("Standby — pyro continuity OK");
             BuzzerPattern::StandbyContinuity
         } else {
+            log::info!("Standby — NO pyro continuity");
             BuzzerPattern::StandbyNoContinuity
         }
     } else {
         // Airborne (MotorBurn / Coast / Freefall) — stay silent.
+        log::info!("Airborne (state={:?}) — buzzer silent", data.flight_state);
         BuzzerPattern::Silent
     };
 

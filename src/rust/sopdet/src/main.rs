@@ -99,10 +99,16 @@ fn main() -> anyhow::Result<()> {
     // setup_and_open opens the UART, starts the reader thread, configures
     // survey-in, saves parameters, and enables RTCM output.  This call blocks
     // while issuing the configuration commands (~2–3 seconds total).
-    let gps = gps::setup_and_open(PathBuf::from(GPS_PORT))
-        .with_context(|| format!("Cannot initialise LC29H GPS on '{}'", GPS_PORT))?;
-
-    log::info!("LC29H GPS ready — survey-in active ({}s / 15.0m)", 60);
+    let gps_opt = match gps::setup_and_open(PathBuf::from(GPS_PORT)) {
+        Ok(gps) => {
+            log::info!("LC29H GPS ready — survey-in active ({}s / 15.0m)", 60);
+            Some(gps)
+        }
+        Err(e) => {
+            log::warn!("Cannot initialise LC29H GPS on '{}': {}", GPS_PORT, e);
+            None
+        }
+    };
 
     // Channel for raw RTCM bytes flowing from the GPS thread to the radio
     // thread.  The channel is unbounded; RTCM frames are small (≤ a few
@@ -110,37 +116,48 @@ fn main() -> anyhow::Result<()> {
     // concern in practice.
     let (rtcm_tx, rtcm_rx) = mpsc::channel::<Vec<u8>>();
 
-    {
+    if let Some(gps) = gps_opt {
         let state = Arc::clone(&state);
         thread::Builder::new()
             .name("gps".to_string())
             .spawn(move || gps::run_gps_thread(gps, rtcm_tx, state))
             .context("Cannot spawn GPS thread")?;
+    } else {
+        log::warn!("GPS not connected, skipping GPS thread");
     }
 
     // ── RFM95 LoRa Radio ──────────────────────────────────────────────────────
-    let radio = Rfm95::open(
+    let radio_opt = match Rfm95::open(
         SPI_PATH,
         PinConfig {
             gpio_chip: GPIO_CHIP.to_string(),
             reset_pin: RFM95_RESET_PIN,
             dio0_pin: Some(RFM95_DIO0_PIN),
         },
-    )
-    .with_context(|| format!("Cannot open RFM95 on '{}'", SPI_PATH))?;
+    ) {
+        Ok(radio) => {
+            log::info!(
+                "RFM95 ready — reset=GPIO17 DIO0=GPIO{} DIO1=GPIO6 DIO2=GPIO26",
+                RFM95_DIO0_PIN,
+            );
+            Some(radio)
+        }
+        Err(e) => {
+            log::warn!("Cannot open RFM95 on '{}': {}", SPI_PATH, e);
+            None
+        }
+    };
 
-    log::info!(
-        "RFM95 ready — reset=GPIO17 DIO0=GPIO{} DIO1=GPIO6 DIO2=GPIO26",
-        RFM95_DIO0_PIN,
-    );
-
-    {
+    if let Some(radio) = radio_opt {
         let state = Arc::clone(&state);
         let radio_logger = logger.clone();
         thread::Builder::new()
             .name("radio".to_string())
             .spawn(move || radio::run_radio_thread(radio, state, rtcm_rx, radio_logger))
             .context("Cannot spawn radio thread")?;
+    } else {
+        log::warn!("Radio not connected, skipping radio thread");
+        drop(rtcm_rx); // Prevent unbounded queue growth if GPS thread is sending RTCM bytes
     }
 
     // ── HTTP Server ───────────────────────────────────────────────────────────

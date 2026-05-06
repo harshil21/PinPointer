@@ -7,6 +7,10 @@ edition = "2024"
 name = "sirius"
 path = "src/main.rs"
 
+[[bin]]
+name = "fire_pyro"
+path = "src/fire_pyro.rs"
+
 [dependencies]
 # Shared telemetry protocol (also used by sopdet)
 protocol = { path = "../protocol" }

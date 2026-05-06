@@ -72,7 +72,6 @@ pub struct LogEntry {
 
     // ── FIRM: derived scalars ─────────────────────────────────────────────────
     pub tilt_deg: f32,
-    pub mach: f32,
 
     // ── FIRM: attitude quaternion (w, x, y, z) ────────────────────────────────
     pub quat_w: f32,
@@ -139,7 +138,6 @@ pub fn build_log_entry(data: &FlightData, boot: Instant, tx_hex: &str, rx_hex: &
         pressure_pa: data.pressure_pa,
 
         tilt_deg: data.tilt_deg,
-        mach: data.mach,
 
         quat_w: data.quat_w,
         quat_x: data.quat_x,
