@@ -44,8 +44,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 use time::{OffsetDateTime, UtcOffset};
-use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Context;
 use gpio_cdev::{Chip, LineRequestFlags};
@@ -91,9 +91,11 @@ fn main() -> anyhow::Result<()> {
     let dt = OffsetDateTime::now_utc();
     let local = dt.to_offset(UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC));
 
-    let fmt = time::format_description::parse("[hour]_[minute]_[second]").unwrap();
-    let hh_mm_ss = local.format(&fmt).unwrap();
-    let log_path = format!("logs/sirius_log_{}.csv", hh_mm_ss);
+    let fmt =
+        time::format_description::parse("[year repr:last_two][month][day]_[hour][minute][second]")
+            .unwrap();
+    let dt_str = local.format(&fmt).unwrap();
+    let log_path = format!("logs/sirius_{}.csv", dt_str);
 
     log::info!("╔══════════════════════════════════════╗");
     log::info!("║   Sirius Flight Computer — Startup   ║");
@@ -222,12 +224,16 @@ fn main() -> anyhow::Result<()> {
 
     // ── Main loop ─────────────────────────────────────────────────────────────
     loop {
-        // ── 1. FIRM data ──────────────────────────────────────────────────────
+        // ── 1. FIRM data ─────────────────────────────────────────────────────────────────
         // get_data_packets blocks up to 10 ms waiting for at least one packet,
         // which naturally throttles the loop to the IMU output rate (~100 Hz).
+        let mut had_new_data = false;
         let state_changed = if let Some(client) = firm_client.as_mut() {
             match client.get_data_packets(Some(Duration::from_millis(10))) {
-                Ok(pkts) if !pkts.is_empty() => processor.update(&pkts, &mut flight_data),
+                Ok(pkts) if !pkts.is_empty() => {
+                    had_new_data = true;
+                    processor.update(&pkts, &mut flight_data)
+                }
                 _ => false,
             }
         } else {
@@ -235,17 +241,31 @@ fn main() -> anyhow::Result<()> {
             false
         };
 
-        // ── 2. GPS data (non-blocking drain) ─────────────────────────────────
+        // ── 2. GPS data (non-blocking drain) ─────────────────────────────────────
         if let Some(gps_port) = gps.as_mut() {
             while let Some(msg) = gps_port.try_get_gps_data() {
-                log::info!("GPS message: {:?}", msg);
-                if let WireMessage::NmeaGga(gga) = msg {
-                    flight_data.gps_lat = gga.latitude;
-                    flight_data.gps_lon = gga.longitude;
-                    flight_data.gps_alt_m = gga.altitude_m;
-                    flight_data.rtk_fix = gga_fix_to_rtk(gga.fix_quality);
-                    flight_data.hdop = gga.hdop;
-                    flight_data.satellites_used = gga.satellites_used;
+                match msg {
+                    WireMessage::NmeaGga(gga) => {
+                        log::debug!(
+                            "GGA fix={:?} sats={} lat={:.6} lon={:.6}",
+                            gga.fix_quality,
+                            gga.satellites_used,
+                            gga.latitude,
+                            gga.longitude
+                        );
+                        flight_data.gps_lat = gga.latitude;
+                        flight_data.gps_lon = gga.longitude;
+                        flight_data.gps_alt_m = gga.altitude_m;
+                        flight_data.rtk_fix = gga_fix_to_rtk(gga.fix_quality);
+                        flight_data.hdop = gga.hdop;
+                        flight_data.satellites_used = gga.satellites_used;
+                        had_new_data = true;
+                    }
+                    WireMessage::NmeaGsv(gsv) => {
+                        flight_data.gps_snr = gsv.avg_snr();
+                        had_new_data = true;
+                    }
+                    _ => {}
                 }
             }
         }
@@ -289,21 +309,25 @@ fn main() -> anyhow::Result<()> {
         let contact_lost = contact_lost_flag.load(Ordering::Relaxed);
         update_buzzer(&flight_data, emergency || contact_lost, &buzzer);
 
-        // ── 8. Drain radio log bytes (non-blocking) ───────────────────────────
+        // ── 8. Drain radio log bytes (non-blocking) ────────────────────────────────────
         if let Ok(tx) = tx_log_rx.try_recv() {
             last_tx_hex = bytes_to_hex(&tx);
+            had_new_data = true;
         }
         if let Ok(rx) = rx_log_rx.try_recv() {
             last_rx_hex = bytes_to_hex(&rx);
+            had_new_data = true;
         }
 
-        // ── 9. CSV log (one row per loop iteration) ───────────────────────────
-        logger.log(build_log_entry(
-            &flight_data,
-            boot,
-            &last_tx_hex,
-            &last_rx_hex,
-        ));
+        // ── 9. CSV log — only write when new data arrived ─────────────────────────────
+        if had_new_data {
+            logger.log(build_log_entry(
+                &flight_data,
+                boot,
+                &last_tx_hex,
+                &last_rx_hex,
+            ));
+        }
     }
 
     // Unreachable in normal operation; lets Drop run on Ctrl-C / SIGTERM.
@@ -355,24 +379,24 @@ fn fire_pyro(pin: &gpio_cdev::LineHandle, data: &mut FlightData, freefall_trigge
 fn update_buzzer(data: &FlightData, emergency: bool, buzzer: &BuzzerController) {
     let desired = if emergency {
         // Emergency takes priority over everything — continuous loud tone.
-        log::info!("Emergency signal active — switching buzzer to EMERGENCY pattern");
+        // log::info!("Emergency signal active — switching buzzer to EMERGENCY pattern");
         BuzzerPattern::Emergency
     } else if data.flight_state == FlightState::Landed {
         // Beep out the apogee altitude so the recovery team can log it.
-        log::info!("Landed — switching buzzer to APOGEE ANNOUNCE pattern ({} m)", data.apogee_m);
+        // log::info!("Landed — switching buzzer to APOGEE ANNOUNCE pattern ({} m)", data.apogee_m);
         BuzzerPattern::ApogeeAnnounce(data.apogee_m as u32)
     } else if data.flight_state == FlightState::Standby {
         // On the pad: indicate pyro continuity status.
         if data.pyro_continuity {
-            log::info!("Standby — pyro continuity OK");
+            // log::info!("Standby — pyro continuity OK");
             BuzzerPattern::StandbyContinuity
         } else {
-            log::info!("Standby — NO pyro continuity");
+            // log::info!("Standby — NO pyro continuity");
             BuzzerPattern::StandbyNoContinuity
         }
     } else {
         // Airborne (MotorBurn / Coast / Freefall) — stay silent.
-        log::info!("Airborne (state={:?}) — buzzer silent", data.flight_state);
+        // log::info!("Airborne (state={:?}) — buzzer silent", data.flight_state);
         BuzzerPattern::Silent
     };
 

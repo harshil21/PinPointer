@@ -1,4 +1,4 @@
-use crate::protocol::nmea::GgaData;
+use crate::protocol::nmea::{GgaData, GsvData};
 use crate::protocol::pair::PairResponse;
 
 use super::commands::{PQTMCfgMsgRate, PQTMCfgSvin};
@@ -8,6 +8,7 @@ pub enum WireMessage {
     PQTMMessage(PQTMResponse),
     PairMessage(PairResponse),
     NmeaGga(GgaData),
+    NmeaGsv(GsvData),
 }
 
 /// Represents the output from the LC29H-BS device.

@@ -436,6 +436,7 @@ fn transmit_downlink(
             pyro_deployed: data.pyro_deployed,
             pyro_continuity: data.pyro_continuity,
             flight_state: data.flight_state.as_u8(),
+            gps_snr: data.gps_snr,
         }
         .serialize()
         .to_vec()

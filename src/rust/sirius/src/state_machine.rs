@@ -18,11 +18,11 @@ use firm_core::firm_packets::ProcessedFIRMData;
 // ── Threshold constants ───────────────────────────────────────────────────────
 
 /// Minimum altitude (m AGL) required before launch is declared.
-const LAUNCH_ALT_THRESHOLD_M: f32 = 10.0;
+const LAUNCH_ALT_THRESHOLD_M: f32 = 20.0;
 
 /// Minimum raw Z-acceleration (g) for launch detection.
 /// Derived from 20 m/s² net acceleration: 20 / 9.81 ≈ 2.039 g.
-const LAUNCH_ACCEL_THRESHOLD_G: f32 = 20.0 / 9.81;
+const LAUNCH_ACCEL_THRESHOLD_G: f32 = 30.0 / 9.81;
 
 /// Fraction of peak velocity below which burnout / coast is declared.
 /// Requires peak velocity > MIN_PEAK_VEL_MPS to prevent a false trigger

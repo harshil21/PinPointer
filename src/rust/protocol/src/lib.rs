@@ -212,11 +212,14 @@ pub struct DownlinkPacket {
     /// Current flight state (0 = Standby, 1 = MotorBurn, 2 = Coast,
     /// 3 = Freefall, 4 = Landed).
     pub flight_state: u8,
+    /// Average GPS signal-to-noise ratio across all tracked satellites (dB-Hz).
+    /// Computed from NMEA GSV sentences. Zero if no GSV data available.
+    pub gps_snr: u8,
 }
 
 impl DownlinkPacket {
     /// Wire size of a serialised downlink packet (bytes).
-    pub const SIZE: usize = 43;
+    pub const SIZE: usize = 44;
 
     /// Serialise to a fixed-size byte array.
     pub fn serialize(&self) -> [u8; Self::SIZE] {
@@ -234,6 +237,7 @@ impl DownlinkPacket {
         b[40] = self.pyro_deployed as u8;
         b[41] = self.pyro_continuity as u8;
         b[42] = self.flight_state;
+        b[43] = self.gps_snr;
         b
     }
 
@@ -262,6 +266,7 @@ impl DownlinkPacket {
             pyro_deployed: bytes[40] != 0,
             pyro_continuity: bytes[41] != 0,
             flight_state: bytes[42],
+            gps_snr: bytes[43],
         })
     }
 }
@@ -435,6 +440,7 @@ mod tests {
             pyro_deployed: false,
             pyro_continuity: true,
             flight_state: 3,
+            gps_snr: 0,
         };
         let bytes = pkt.serialize();
         assert_eq!(bytes.len(), DownlinkPacket::SIZE);
@@ -456,6 +462,7 @@ mod tests {
             pyro_deployed: true,
             pyro_continuity: false,
             flight_state: 2,
+            gps_snr: 0,
         };
         let bytes = pkt.serialize();
         let dec = DownlinkPacket::deserialize(&bytes).expect("deserialise failed");
@@ -467,6 +474,7 @@ mod tests {
         assert!(dec.pyro_deployed);
         assert!(!dec.pyro_continuity);
         assert_eq!(dec.flight_state, 2);
+        assert_eq!(dec.gps_snr, 0);
     }
 
     #[test]
@@ -494,6 +502,7 @@ mod tests {
                 pyro_deployed: false,
                 pyro_continuity: false,
                 flight_state: 0,
+                gps_snr: 0,
             };
             let dec = DownlinkPacket::deserialize(&pkt.serialize()).unwrap();
             assert_eq!(

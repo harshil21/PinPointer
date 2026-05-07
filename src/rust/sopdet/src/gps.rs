@@ -292,6 +292,21 @@ fn handle_wire_message(wire: WireMessage, state: &Arc<Mutex<AppState>>) {
 
         // All other PQTM / PAIR messages are ignored by the polling loop
         // (command responses are consumed synchronously during setup).
+        // Average SNR update from satellite view sentences.
+        WireMessage::NmeaGsv(gsv) => {
+            let avg = gsv.avg_snr();
+            log::debug!(
+                "GSV: {} satellites, avg SNR = {} dB-Hz",
+                gsv.satellites.len(),
+                avg
+            );
+            if let Ok(mut s) = state.lock() {
+                s.gps_snr = avg;
+            }
+        }
+
+        // All other PQTM / PAIR messages are ignored by the polling loop
+        // (command responses are consumed synchronously during setup).
         _ => {}
     }
 }

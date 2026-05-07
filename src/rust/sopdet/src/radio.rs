@@ -187,7 +187,7 @@ fn handle_downlink(
 
     log::info!(
         "RX DOWNLINK seq={} alt={:.1}m vel={:.1}m/s state={} fix={} \
-         pyro_dep={} rssi={}dBm snr={:.1}dB",
+         pyro_dep={} rssi={}dBm snr={:.1}dB rocket_snr={}dBHz",
         dl.sequence_num,
         dl.altitude_m,
         dl.velocity_mps,
@@ -196,6 +196,7 @@ fn handle_downlink(
         dl.pyro_deployed,
         rssi,
         snr,
+        dl.gps_snr,
     );
 
     // ── Update shared state ───────────────────────────────────────────────────
@@ -215,12 +216,16 @@ fn handle_downlink(
         flight_state: dl.flight_state,
         rssi,
         snr,
+        gps_snr: dl.gps_snr,
     };
 
-    if let Ok(mut s) = state.lock() {
+    let base_snr = if let Ok(mut s) = state.lock() {
         s.last_downlink_rssi = Some(rssi);
         s.add_telemetry(entry);
-    }
+        s.gps_snr
+    } else {
+        0
+    };
 
     // ── Telemetry CSV log ─────────────────────────────────────────────────────
     logger.log_telemetry(TelemetryLogEntry {
@@ -239,6 +244,8 @@ fn handle_downlink(
         flight_state: Some(dl.flight_state),
         rssi: Some(rssi),
         snr: Some(snr),
+        rocket_gps_snr: Some(dl.gps_snr),
+        base_gps_snr: Some(base_snr),
         command: None,
         rtk_data_len: None,
         fragment_session: None,
@@ -275,7 +282,7 @@ fn transmit_rtcm(
         };
         let bytes = uplink.serialize();
 
-        log::debug!("TX UPLINK cmd={} rtk_len={}", command, data.len());
+        log::info!("TX UPLINK cmd={} rtk_len={}", command, data.len());
 
         match radio.transmit_with_timeout(&bytes, TX_TIMEOUT) {
             Ok(_) => {
@@ -295,6 +302,8 @@ fn transmit_rtcm(
                     flight_state: None,
                     rssi: None,
                     snr: None,
+                    rocket_gps_snr: None,
+                    base_gps_snr: None,
                     command: Some(command.to_string()),
                     rtk_data_len: Some(data.len()),
                     fragment_session: None,
@@ -312,7 +321,7 @@ fn transmit_rtcm(
         let chunks: Vec<&[u8]> = data.chunks(MAX_FRAG_DATA).collect();
         let total = chunks.len() as u8;
 
-        log::debug!(
+        log::info!(
             "TX FRAGMENT session={} total_frags={} total_bytes={}",
             sid,
             total,
@@ -347,6 +356,8 @@ fn transmit_rtcm(
                         flight_state: None,
                         rssi: None,
                         snr: None,
+                        rocket_gps_snr: None,
+                        base_gps_snr: None,
                         command: None,
                         rtk_data_len: Some(chunk.len()),
                         fragment_session: Some(sid),
@@ -374,7 +385,7 @@ fn transmit_rtcm(
         }
 
         if all_ok {
-            log::debug!(
+            log::info!(
                 "TX FRAGMENT session={} complete ({} frags, {} bytes)",
                 sid,
                 total,
@@ -421,6 +432,8 @@ fn transmit_command_only(radio: &mut Rfm95, command: GroundCommand, logger: &Log
                 flight_state: None,
                 rssi: None,
                 snr: None,
+                rocket_gps_snr: None,
+                base_gps_snr: None,
                 command: Some(command.to_string()),
                 rtk_data_len: Some(0),
                 fragment_session: None,

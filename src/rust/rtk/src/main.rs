@@ -25,6 +25,13 @@ fn test_reading_sentences() {
                 WireMessage::NmeaGga(gga) => {
                     println!("Received GGA: {:?}", gga);
                 }
+                WireMessage::NmeaGsv(gsv) => {
+                    println!(
+                        "Received GSV: {} satellites, avg SNR: {} dB-Hz",
+                        gsv.satellites.len(),
+                        gsv.avg_snr()
+                    );
+                }
             }
         }
         count += 1;

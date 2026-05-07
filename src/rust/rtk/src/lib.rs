@@ -5,5 +5,5 @@ pub mod port;
 pub mod protocol;
 pub mod rtcm_parser;
 
-pub use protocol::nmea::{GgaData, GpsFixQuality};
+pub use protocol::nmea::{GgaData, GpsFixQuality, GsvData};
 pub use protocol::response::WireMessage;

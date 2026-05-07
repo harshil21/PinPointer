@@ -88,6 +88,9 @@ pub struct FlightData {
     pub hdop: f32,
     /// Number of satellites used in the position solution.
     pub satellites_used: u8,
+    /// Average GPS signal-to-noise ratio across tracked satellites (dB-Hz).
+    /// Updated from NMEA GSV sentences. Zero until first GSV data arrives.
+    pub gps_snr: u8,
 
     // ── State machine outputs ─────────────────────────────────────────────────
     /// Current flight phase.
@@ -143,6 +146,7 @@ impl Default for FlightData {
             rtk_fix: RtkFixType::NoFix,
             hdop: 99.9,
             satellites_used: 0,
+            gps_snr: 0,
 
             flight_state: FlightState::Standby,
             apogee_m: 0.0,

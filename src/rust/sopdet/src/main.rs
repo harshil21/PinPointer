@@ -29,7 +29,7 @@ use state::AppState;
 // ── Hardware configuration ────────────────────────────────────────────────────
 
 /// UART device for the Quectel LC29H GPS module.
-const GPS_PORT: &str = "/dev/ttyAMA0";
+const GPS_PORT: &str = "/dev/ttyS0";
 
 /// SPI device for the RFM95W LoRa radio.
 const SPI_PATH: &str = "/dev/spidev0.0";
@@ -80,8 +80,8 @@ fn main() -> anyhow::Result<()> {
     // Create the logs/ directory if it doesn't already exist.
     std::fs::create_dir_all("logs").context("Cannot create logs/ directory")?;
 
-    let dt = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-    let telemetry_log = format!("logs/{}_sopdet_telemetry.csv", dt);
+    let dt = chrono::Local::now().format("%y%m%d_%H%M%S").to_string();
+    let telemetry_log = format!("logs/sopdet_{}.csv", dt);
     // Single persistent plain-text log for all HTTP server activity.
     // No date prefix — opened in append mode so all runs share one file.
     let access_log = "logs/sopdet_http.log".to_string();
@@ -217,6 +217,8 @@ fn log_status_summary(state: &Arc<Mutex<AppState>>) {
                 gps.hdop,
             );
         }
+
+        log::info!("Base GPS SNR — avg={}dBHz", s.gps_snr);
 
         if let Some(telem) = s.telemetry.last() {
             log::info!(

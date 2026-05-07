@@ -36,6 +36,8 @@ pub struct TelemetryEntry {
     pub rssi: i16,
     /// Signal-to-noise ratio of the received packet (dB).
     pub snr: f32,
+    /// Average GPS SNR on the rocket (dB-Hz), from NMEA GSV sentences via downlink.
+    pub gps_snr: u8,
 }
 
 /// Shared state accessed by all sopdet threads.
@@ -58,6 +60,9 @@ pub struct AppState {
     /// survey-in (e.g. after moving the base station).  Cleared by the GPS
     /// thread once the re-survey has been initiated.
     pub resurvey_requested: bool,
+    /// Average SNR of the base-station GPS satellites (dB-Hz), from NMEA GSV.
+    /// Updated by the GPS thread. Zero until first GSV data arrives.
+    pub gps_snr: u8,
 }
 
 impl AppState {
@@ -71,6 +76,7 @@ impl AppState {
             last_downlink_rssi: None,
             uptime_start: Instant::now(),
             resurvey_requested: false,
+            gps_snr: 0,
         }
     }
 

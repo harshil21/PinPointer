@@ -89,6 +89,8 @@ pub struct LogEntry {
     pub hdop: f32,
     /// Number of satellites used in the position solution.
     pub satellites_used: u8,
+    /// Average GPS SNR from satellites (dB-Hz, 0 if no GSV data yet).
+    pub gps_snr: u8,
 
     // ── Pyro ──────────────────────────────────────────────────────────────────
     pub pyro_deployed: bool,
@@ -150,6 +152,7 @@ pub fn build_log_entry(data: &FlightData, boot: Instant, tx_hex: &str, rx_hex: &
         rtk_fix: data.rtk_fix.to_string(),
         hdop: data.hdop,
         satellites_used: data.satellites_used,
+        gps_snr: data.gps_snr,
 
         pyro_deployed: data.pyro_deployed,
         pyro_continuity: data.pyro_continuity,

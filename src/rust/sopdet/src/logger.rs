@@ -59,6 +59,10 @@ pub struct TelemetryLogEntry {
     pub rssi: Option<i16>,
     /// Signal-to-noise ratio (dB) — RX only.
     pub snr: Option<f32>,
+    /// Average GPS SNR on the rocket (Sirius) — populated for RX downlink rows.
+    pub rocket_gps_snr: Option<u8>,
+    /// Average GPS SNR at the base station (Sopdet) — populated for all rows.
+    pub base_gps_snr: Option<u8>,
 
     // ── Uplink / fragment fields (TX only) ────────────────────────────────────
     /// Ground command bundled with this uplink (`"None"`, `"EmergencyLocate"`,
