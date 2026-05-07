@@ -73,10 +73,9 @@ fun BaseStationScreen(viewModel: TrackingViewModel) {
                 )
             }
 
-            item { GpsStatusCard(status?.gpsFix) }
+            item { GpsStatusCard(status?.gpsFix, status?.gpsSNR ?: 0) }
             item { SurveyInCard(status) }
             item { DownlinkCard(status) }
-            item { GpsQualityCard(status?.gpsSNR ?: 0) }
             item { SystemCard(status) }
         }
     }
@@ -150,7 +149,7 @@ private fun StatusDot(color: Color) {
 }
 
 @Composable
-private fun GpsStatusCard(gpsFix: GpsFixJson?) {
+private fun GpsStatusCard(gpsFix: GpsFixJson?, gpsSNR: Int) {
     val fixColor = when {
         gpsFix == null -> MaterialTheme.colorScheme.error
         gpsFix.fixQuality.contains("Rtk", ignoreCase = true) -> MaterialTheme.colorScheme.primary
@@ -189,6 +188,38 @@ private fun GpsStatusCard(gpsFix: GpsFixJson?) {
             MetricRow("Altitude", "%.1f m".format(gpsFix.altitudeM))
             MetricRow("Satellites", "${gpsFix.satellitesUsed}")
             MetricRow("HDOP", "%.2f".format(gpsFix.hdop))
+
+            // GPS SNR inline
+            Spacer(modifier = Modifier.height(4.dp))
+            val snrQuality = when {
+                gpsSNR >= 35 -> Triple("Excellent", MaterialTheme.colorScheme.primary, "$gpsSNR dB-Hz")
+                gpsSNR >= 25 -> Triple("Good", MaterialTheme.colorScheme.secondary, "$gpsSNR dB-Hz")
+                gpsSNR > 0 -> Triple("Poor", MaterialTheme.colorScheme.error, "$gpsSNR dB-Hz")
+                else -> Triple("No data", MaterialTheme.colorScheme.outline, "—")
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "GPS SNR", style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        snrQuality.third, style = DataTextStyleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        snrQuality.first, style = MaterialTheme.typography.labelSmall,
+                        color = snrQuality.second, fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
         }
     }
 }
@@ -275,47 +306,6 @@ private fun DownlinkCard(status: StatusJson?) {
             )
         }
         MetricRow("Packets Buffered", "${status?.telemetryCount ?: 0}")
-    }
-}
-
-@Composable
-private fun GpsQualityCard(gpsSNR: Int) {
-    val quality = when {
-        gpsSNR >= 35 -> Triple("Excellent", MaterialTheme.colorScheme.primary, "≥ 35 dB-Hz")
-        gpsSNR >= 25 -> Triple("Good", MaterialTheme.colorScheme.secondary, "25–35 dB-Hz")
-        gpsSNR > 0 -> Triple("Poor", MaterialTheme.colorScheme.error, "< 25 dB-Hz")
-        else -> Triple("No data", MaterialTheme.colorScheme.outline, "–")
-    }
-
-    SectionCard(
-        title = "Base Station GPS SNR",
-        icon = Icons.Rounded.Router,
-        iconTint = quality.second
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = if (gpsSNR > 0) "$gpsSNR dB-Hz" else "—",
-                    style = DataTextStyle,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = quality.first,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = quality.second,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            Text(
-                text = quality.third,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 

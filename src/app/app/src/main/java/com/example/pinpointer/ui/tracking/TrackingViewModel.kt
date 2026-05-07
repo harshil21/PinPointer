@@ -17,9 +17,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class SignalState {
-    GPS_FIX,       // Green  — GPS + RTK active
-    RSSI_ONLY,     // Amber  — estimating via Friis / RSSI scan
-    LOST_CONTACT   // Red    — no packets recently
+    GPS_FIX,       // GPS or RTK fix active
+    RSSI_ONLY,     // Estimating via Friis / RSSI scan
+    LOST_CONTACT   // No packets recently
 }
 
 data class TrackingUiState(
@@ -28,35 +28,21 @@ data class TrackingUiState(
     val orientation: OrientationData = OrientationData(),
     val signalState: SignalState = SignalState.LOST_CONTACT,
     val secondsSinceLastContact: Long = 9999L,
-    /** 3-D slant distance to rocket in metres. */
     val distanceM: Double = 0.0,
-    /** Compass bearing of the rocket from the base station, degrees [0, 360). */
     val targetAzimuth: Double = 0.0,
-    /** Elevation angle of the rocket from the base station, degrees. */
     val targetElevation: Double = 0.0,
-    /**
-     * Signed deviation: positive = rotate phone right (clockwise) to aim.
-     * In (-180, 180].  Valid when [distanceIsGps] or [rssiHasEstimate].
-     */
+    /** Positive = rotate phone right (clockwise). In (-180, 180]. */
     val deviationAzimuth: Double = 0.0,
-    /** Signed deviation: positive = tilt phone up to aim. */
+    /** Positive = tilt phone up. */
     val deviationElevation: Double = 0.0,
-    /** Whether the distance/direction is GPS-derived (true) or RSSI-estimated (false). */
     val distanceIsGps: Boolean = false,
-
-    // ── RSSI direction-finding state ──────────────────────────────────────────
-    /** The finder currently has a statistically reliable direction estimate. */
+    /** Settings toggle: use RSSI scan even when GPS is available. */
+    val isForceRssiMode: Boolean = false,
+    // ── RSSI direction-finding ────────────────────────────────────────────────
     val rssiHasEstimate: Boolean = false,
-    /** Fraction of the full 360° azimuth that has been sampled so far, [0, 1]. */
     val rssiScanCoverage: Float = 0f,
-    /**
-     * 36-element list.  Element `i` is true if the azimuth sector
-     * [i×10°, (i+1)×10°) has been sampled.
-     */
     val rssiAzimuthBins: List<Boolean> = List(36) { false },
-    /** Peak RSSI seen across all current RSSI-scan samples. */
     val rssiMaxRssi: Int = -120,
-    /** Total number of RSSI-scan samples accumulated. */
     val rssiSampleCount: Int = 0
 )
 
@@ -66,9 +52,12 @@ class TrackingViewModel(
 ) : ViewModel() {
 
     private val rssiDirectionFinder = RssiDirectionFinder()
-
-    /** Last telemetry sequence number seen — used to gate RSSI sample collection. */
     private var lastSeenSeq: Int = -1
+
+    private val _forceRssiOnly = MutableStateFlow(false)
+    fun setForceRssiOnly(value: Boolean) {
+        _forceRssiOnly.value = value
+    }
 
     init {
         viewModelScope.launch { repository.startPolling() }
@@ -84,93 +73,82 @@ class TrackingViewModel(
     val uiState: StateFlow<TrackingUiState> = combine(
         repository.latestTelemetry,
         repository.status,
-        orientationTracker.orientation
-    ) { telemetry, status, orientation ->
+        orientationTracker.orientation,
+        _forceRssiOnly
+    ) { telemetry, status, orientation, forceRssi ->
 
         // ── Signal state ───────────────────────────────────────────────────────
         val now = System.currentTimeMillis()
-        val lastContactMs = telemetry?.receivedAt ?: 0L
-        val secondsSince = if (lastContactMs == 0L) 9999L else (now - lastContactMs) / 1000L
+        val lastMs = telemetry?.receivedAt ?: 0L
+        val secondsSince = if (lastMs == 0L) 9999L else (now - lastMs) / 1000L
 
         val signalState = when {
             telemetry == null || secondsSince > 5L -> SignalState.LOST_CONTACT
-            telemetry.rtkFix !in listOf("NoFix", "DeadReckoning") && status?.gpsFix != null ->
-                SignalState.GPS_FIX
+            !forceRssi && telemetry.rtkFix !in listOf("NoFix", "DeadReckoning")
+                    && status?.gpsFix != null -> SignalState.GPS_FIX
 
             else -> SignalState.RSSI_ONLY
         }
 
-        // ── GPS-based target ───────────────────────────────────────────────────
+        // ── GPS target ─────────────────────────────────────────────────────────
         var distanceM = 0.0
         var targetAzimuth = 0.0
         var targetElevation = 0.0
         var distanceIsGps = false
 
-        if (telemetry != null && status?.gpsFix != null) {
-            val horizDist = CoordinateMath.calculateDistance(
+        if (!forceRssi && telemetry != null && status?.gpsFix != null) {
+            val hDist = CoordinateMath.calculateDistance(
                 status.gpsFix.latitude, status.gpsFix.longitude,
                 telemetry.gpsLat, telemetry.gpsLon
             )
-            val vertDiff = (telemetry.gpsAltM - status.gpsFix.altitudeM).toDouble()
-            distanceM = Math.sqrt(horizDist * horizDist + vertDiff * vertDiff)
+            val vDiff = (telemetry.gpsAltM - status.gpsFix.altitudeM).toDouble()
+            distanceM = Math.sqrt(hDist * hDist + vDiff * vDiff)
             targetAzimuth = CoordinateMath.calculateBearing(
                 status.gpsFix.latitude, status.gpsFix.longitude,
                 telemetry.gpsLat, telemetry.gpsLon
             )
             targetElevation = CoordinateMath.calculateElevation(
-                horizDist, status.gpsFix.altitudeM, telemetry.gpsAltM
+                hDist, status.gpsFix.altitudeM, telemetry.gpsAltM
             )
             distanceIsGps = true
         } else if (telemetry != null) {
             distanceM = CoordinateMath.estimateDistanceFriis(telemetry.rssi)
         }
 
-        // ── RSSI direction-finder ─────────────────────────────────────────────
+        // ── RSSI finder ────────────────────────────────────────────────────────
         when (signalState) {
             SignalState.GPS_FIX -> {
-                // GPS available — clear stale scan data
                 rssiDirectionFinder.clear()
                 lastSeenSeq = -1
             }
 
             SignalState.RSSI_ONLY -> {
-                // Only add a sample once per newly-received packet (not every orientation tick)
                 if (telemetry != null && telemetry.sequenceNum != lastSeenSeq) {
                     rssiDirectionFinder.addSample(
-                        azimuth = orientation.cameraAzimuth,
-                        elevation = orientation.cameraElevation,
-                        rssi = telemetry.rssi
+                        orientation.cameraAzimuth,
+                        orientation.cameraElevation,
+                        telemetry.rssi
                     )
                     lastSeenSeq = telemetry.sequenceNum
                 }
             }
 
-            SignalState.LOST_CONTACT -> { /* do nothing */
-            }
+            SignalState.LOST_CONTACT -> Unit
         }
 
-        val rssiEstimate = rssiDirectionFinder.estimate
-        val rssiHasEstimate = rssiEstimate != null
+        val rssiEst = rssiDirectionFinder.estimate
+        val rssiHasEst = rssiEst != null
 
-        // ── Determine final target for deviation display ───────────────────────
-        val (finalTargetAz, finalTargetEl) = when {
+        // ── Final target / deviation ───────────────────────────────────────────
+        val (finalAz, finalEl) = when {
             distanceIsGps -> Pair(targetAzimuth, targetElevation)
-            rssiHasEstimate -> Pair(
-                rssiEstimate!!.first.toDouble(),
-                rssiEstimate.second.toDouble()
-            )
-
+            rssiHasEst -> Pair(rssiEst!!.first.toDouble(), rssiEst.second.toDouble())
             else -> Pair(0.0, 0.0)
         }
-
-        val hasTarget = distanceIsGps || rssiHasEstimate
-        val deviationAzimuth = if (hasTarget)
-            CoordinateMath.angleDifference(finalTargetAz, orientation.cameraAzimuth.toDouble())
-        else 0.0
-
-        val deviationElevation = if (hasTarget)
-            finalTargetEl - orientation.cameraElevation.toDouble()
-        else 0.0
+        val hasTarget = distanceIsGps || rssiHasEst
+        val devAz = if (hasTarget)
+            CoordinateMath.angleDifference(finalAz, orientation.cameraAzimuth.toDouble()) else 0.0
+        val devEl = if (hasTarget) finalEl - orientation.cameraElevation.toDouble() else 0.0
 
         TrackingUiState(
             telemetry = telemetry,
@@ -179,12 +157,13 @@ class TrackingViewModel(
             signalState = signalState,
             secondsSinceLastContact = secondsSince,
             distanceM = distanceM,
-            targetAzimuth = finalTargetAz,
-            targetElevation = finalTargetEl,
-            deviationAzimuth = deviationAzimuth,
-            deviationElevation = deviationElevation,
+            targetAzimuth = finalAz,
+            targetElevation = finalEl,
+            deviationAzimuth = devAz,
+            deviationElevation = devEl,
             distanceIsGps = distanceIsGps,
-            rssiHasEstimate = rssiHasEstimate,
+            isForceRssiMode = forceRssi,
+            rssiHasEstimate = rssiHasEst,
             rssiScanCoverage = rssiDirectionFinder.coverage,
             rssiAzimuthBins = rssiDirectionFinder.azimuthBins,
             rssiMaxRssi = rssiDirectionFinder.maxRssi,

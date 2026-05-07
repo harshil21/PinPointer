@@ -320,11 +320,11 @@ private fun EmergencyLocatorCard(
 
 @Composable
 private fun DeployCard(onDeploy: () -> Unit) {
-    ElevatedCard(
+    androidx.compose.material3.Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        colors = androidx.compose.material3.CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
         )
     ) {
         Column(modifier = Modifier.padding(20.dp)) {

@@ -4,14 +4,18 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,34 +27,41 @@ import androidx.compose.material.icons.rounded.FlightTakeoff
 import androidx.compose.material.icons.rounded.GpsFixed
 import androidx.compose.material.icons.rounded.GpsOff
 import androidx.compose.material.icons.rounded.SignalCellularOff
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.pinpointer.ui.theme.DataTextStyle
+import com.example.pinpointer.ui.theme.DataTextStyleLarge
+import com.example.pinpointer.ui.theme.DataTextStyleSmall
 import com.example.pinpointer.ui.theme.DotBad
 import com.example.pinpointer.ui.theme.DotGood
 import com.example.pinpointer.ui.theme.DotOk
@@ -61,10 +72,7 @@ import com.example.pinpointer.ui.theme.FlightStateMotorBurn
 import com.example.pinpointer.ui.theme.FlightStateStandby
 import com.example.pinpointer.ui.theme.RadarBackground
 import com.example.pinpointer.ui.theme.RadarGrid
-import com.example.pinpointer.ui.theme.DataTextStyle
-import com.example.pinpointer.ui.theme.DataTextStyleLarge
-import com.example.pinpointer.ui.theme.DataTextStyleSmall
-import kotlin.math.abs
+import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -72,447 +80,672 @@ import kotlin.math.sqrt
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 private fun flightStateName(s: Int) = when (s) {
-    0 -> "Standby"
-    1 -> "Motor Burn"
-    2 -> "Coast"
-    3 -> "Freefall"
-    4 -> "Landed"
-    else -> "Unknown"
+    0 -> "Standby"; 1 -> "Motor Burn"; 2 -> "Coast"
+    3 -> "Freefall"; 4 -> "Landed"; else -> "Unknown"
 }
 
 private fun flightStateColor(s: Int) = when (s) {
-    0 -> FlightStateStandby
-    1 -> FlightStateMotorBurn
-    2 -> FlightStateCoast
-    3 -> FlightStateFreefall
-    4 -> FlightStateLanded
-    else -> FlightStateStandby
+    0 -> FlightStateStandby; 1 -> FlightStateMotorBurn; 2 -> FlightStateCoast
+    3 -> FlightStateFreefall; 4 -> FlightStateLanded; else -> FlightStateStandby
 }
 
-// ── Root screen ───────────────────────────────────────────────────────────────
+/** Human-readable GPS fix label from the raw rtkFix string. */
+private fun rtkFixLabel(fix: String?) = when (fix) {
+    "RTK-Fixed" -> "RTK Fixed"
+    "RTK-Float" -> "RTK Float"
+    "DGPS", "DgpsFix" -> "DGPS"
+    "GPS", "GpsFix" -> "GPS"
+    "PPS", "PpsFix" -> "PPS"
+    "DeadReckoning" -> "Dead Reck."
+    else -> "No Fix"
+}
 
+enum class ValueTrend { RISING, FALLING, STABLE }
+
+/** Returns the rolling trend of a float value, updating reference every ~2 s. */
+@Composable
+private fun rememberTrend(value: Float, threshold: Float = 0.05f): ValueTrend {
+    var ref by remember { mutableFloatStateOf(value) }
+    var trend by remember { mutableStateOf(ValueTrend.STABLE) }
+    LaunchedEffect(value) {
+        trend = when {
+            value > ref + threshold -> ValueTrend.RISING
+            value < ref - threshold -> ValueTrend.FALLING
+            else -> ValueTrend.STABLE
+        }
+        delay(2_000L)
+        ref = value
+    }
+    return trend
+}
+
+private val trendColorRising = Color(0xFF4CAF50)
+private val trendColorFalling = Color(0xFFF44336)
+private val trendColorStable = Color(0xFF78909C)
+
+private fun ValueTrend.color() = when (this) {
+    ValueTrend.RISING -> trendColorRising
+    ValueTrend.FALLING -> trendColorFalling
+    ValueTrend.STABLE -> trendColorStable
+}
+
+private fun ValueTrend.arrow() = when (this) {
+    ValueTrend.RISING -> "↑"
+    ValueTrend.FALLING -> "↓"
+    ValueTrend.STABLE -> "→"
+}
+
+// ── Root composable ───────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TrackingScreen(viewModel: TrackingViewModel) {
-    val uiState by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsState()
+    val t = state.telemetry
+
+    // GPS altitude relative/absolute toggle
+    var gpsAltRelative by remember { mutableStateOf(true) }
+    var firstGpsAlt by remember { mutableStateOf<Float?>(null) }
+    LaunchedEffect(t?.gpsAltM) {
+        val alt = t?.gpsAltM ?: return@LaunchedEffect
+        if (alt != 0f && firstGpsAlt == null) firstGpsAlt = alt
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // ── TOP: scrollable telemetry section ──────────────────────────────
+            // ── TOP: scrollable telemetry ──────────────────────────────────────
             Column(
                 modifier = Modifier
-                    .weight(0.52f)
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .heightIn(max = 420.dp)        // cap so bottom reticle always shows
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                StatusRow(uiState)
-                TelemetryMetrics(uiState)
+                // ── Pill row ───────────────────────────────────────────────────
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    SignalPill(state)
+                    FlightStatePill(t?.flightState ?: 0)
+                    PyroPill(t?.pyroContinuity ?: false, t?.pyroDeployed ?: false)
+                    if (state.isForceRssiMode) RssiModePill()
+                }
+
+                // ── Tier 1: Big altitude cards ─────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    BigMetricCard(
+                        modifier = Modifier.weight(1f),
+                        label = "Baro Alt",
+                        value = t?.altitudeM ?: 0f,
+                        formatValue = { "%.1f m".format(it) },
+                        trendThreshold = 0.3f
+                    )
+                    BigMetricCard(
+                        modifier = Modifier.weight(1f),
+                        label = if (gpsAltRelative) "GPS Alt (AGL)" else "GPS Alt (MSL)",
+                        value = if (gpsAltRelative && firstGpsAlt != null)
+                            (t?.gpsAltM ?: 0f) - (firstGpsAlt ?: 0f)
+                        else t?.gpsAltM ?: 0f,
+                        formatValue = { "%.1f m".format(it) },
+                        trendThreshold = 0.3f,
+                        clickLabel = if (gpsAltRelative) "Switch to MSL" else "Switch to AGL",
+                        onClick = { gpsAltRelative = !gpsAltRelative },
+                        badge = if (gpsAltRelative) "AGL ⇄" else "MSL ⇄"
+                    )
+                }
+
+                // ── Tier 2: RSSI + RTK ─────────────────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MediumMetricCard(
+                        modifier = Modifier.weight(1f),
+                        label = "RSSI",
+                        value = (t?.rssi ?: 0).toFloat(),
+                        formatValue = { "${it.toInt()} dBm" },
+                        trendThreshold = 1f
+                    )
+                    RtkFixCard(
+                        modifier = Modifier.weight(1f),
+                        rtkFix = t?.rtkFix
+                    )
+                }
+
+                // ── Tier 3: Velocity / Accel / SNR ────────────────────────────
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SmallMetricCard(
+                        Modifier.weight(1f), "Velocity",
+                        (t?.velocityMps ?: 0f),
+                        { "%+.1f m/s".format(it) }, 0.1f
+                    )
+                    SmallMetricCard(
+                        Modifier.weight(1f), "Accel Z",
+                        (t?.accelZGs ?: 0f),
+                        { "%.2f g".format(it) }, 0.05f
+                    )
+                    SmallMetricCard(
+                        Modifier.weight(1f), "SNR",
+                        (t?.snr ?: 0f),
+                        { "%.1f dB".format(it) }, 0.5f
+                    )
+                }
+
+                // ── GPS coordinates (compact) ──────────────────────────────────
+                if (t != null && t.gpsLat != 0.0) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "GPS  %.5f°  %.5f°".format(t.gpsLat, t.gpsLon),
+                            style = DataTextStyleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
 
-            // ── BOTTOM: fixed antenna pointing section ─────────────────────────
+            // ── BOTTOM: antenna pointing (takes all remaining height) ──────────
             AntennaPointingSection(
                 modifier = Modifier
-                    .weight(0.48f)
-                    .fillMaxWidth(),
-                uiState = uiState
+                    .fillMaxWidth()
+                    .weight(1f),
+                uiState = state
             )
         }
     }
 }
 
-// ── Status row (signal + flight state) ───────────────────────────────────────
+// ── Status pills ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun StatusRow(state: TrackingUiState) {
-    val signalColor by animateColorAsState(
-        targetValue = when (state.signalState) {
-            SignalState.GPS_FIX -> MaterialTheme.colorScheme.primary
-            SignalState.RSSI_ONLY -> MaterialTheme.colorScheme.tertiary
-            SignalState.LOST_CONTACT -> MaterialTheme.colorScheme.error
-        },
-        label = "signalColor"
-    )
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Signal state pill
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(signalColor.copy(alpha = 0.15f))
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = when (state.signalState) {
-                        SignalState.GPS_FIX -> Icons.Rounded.GpsFixed
-                        SignalState.RSSI_ONLY -> Icons.Rounded.GpsOff
-                        SignalState.LOST_CONTACT -> Icons.Rounded.SignalCellularOff
-                    },
-                    contentDescription = null,
-                    tint = signalColor,
-                    modifier = Modifier.size(14.dp)
-                )
-                Text(
-                    text = when (state.signalState) {
-                        SignalState.GPS_FIX -> "GPS RTK"
-                        SignalState.RSSI_ONLY -> "RSSI Est."
-                        SignalState.LOST_CONTACT -> "No Signal"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = signalColor
-                )
-            }
-        }
-
-        // Flight state pill
-        val fsColor = flightStateColor(state.telemetry?.flightState ?: 0)
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(fsColor.copy(alpha = 0.15f))
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.FlightTakeoff,
-                    contentDescription = null,
-                    tint = fsColor,
-                    modifier = Modifier.size(14.dp)
-                )
-                Text(
-                    text = flightStateName(state.telemetry?.flightState ?: 0),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = fsColor
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Last contact indicator
-        if (state.signalState == SignalState.LOST_CONTACT) {
-            Text(
-                text = if (state.secondsSinceLastContact > 9000) "No contact"
-                else "${state.secondsSinceLastContact}s ago",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error
-            )
-        }
-    }
-}
-
-// ── Telemetry metrics grid ────────────────────────────────────────────────────
-
-@Composable
-private fun TelemetryMetrics(state: TrackingUiState) {
-    val t = state.telemetry
-
-    // Row 1: Altitudes + Velocity
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MetricTile(Modifier.weight(1f), "Baro Alt", "%.1f m".format(t?.altitudeM ?: 0f))
-        MetricTile(Modifier.weight(1f), "GPS Alt", "%.1f m".format(t?.gpsAltM ?: 0f))
-        MetricTile(Modifier.weight(1f), "Velocity", "%+.1f m/s".format(t?.velocityMps ?: 0f))
-    }
-
-    // Row 2: RSSI / SNR / GPS SNR
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MetricTile(Modifier.weight(1f), "RSSI", "${t?.rssi ?: 0} dBm")
-        MetricTile(Modifier.weight(1f), "SNR", "%.1f dB".format(t?.snr ?: 0f))
-        MetricTile(
-            Modifier.weight(1f),
-            "GPS SNR",
-            if ((t?.gpsSNR ?: 0) > 0) "${t!!.gpsSNR} dB-Hz" else "—"
-        )
-    }
-
-    // Row 3: RTK + Pyro
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MetricTile(Modifier.weight(1f), "RTK Fix", t?.rtkFix ?: "—")
-
-        // Pyro tile — color-coded
-        val pyroColor = if (t?.pyroContinuity == true) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.error
-        MetricTileColored(
-            modifier = Modifier.weight(1f),
-            label = "Pyro",
-            value = if (t?.pyroContinuity == true) "CONT" else "DISC",
-            valueColor = pyroColor
-        )
-
-        MetricTile(Modifier.weight(1f), "Accel Z", "%.2f g".format(t?.accelZGs ?: 0f))
-    }
-
-    // GPS coordinates
-    if (t != null && t.gpsLat != 0.0) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MetricTile(
-                Modifier.weight(1f),
-                "Latitude",
-                "%.5f°".format(t.gpsLat)
-            )
-            MetricTile(
-                Modifier.weight(1f),
-                "Longitude",
-                "%.5f°".format(t.gpsLon)
-            )
-        }
-    }
-}
-
-@Composable
-private fun MetricTile(modifier: Modifier, label: String, value: String) {
-    MetricTileColored(modifier, label, value, MaterialTheme.colorScheme.onSurface)
-}
-
-@Composable
-private fun MetricTileColored(modifier: Modifier, label: String, value: String, valueColor: Color) {
+private fun StatusPill(
+    label: String,
+    color: Color,
+    icon: @Composable (() -> Unit)? = null
+) {
     Box(
-        modifier = modifier
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 10.dp, vertical = 10.dp)
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.15f))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
-        Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            icon?.invoke()
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = value,
-                style = DataTextStyleSmall,
-                color = valueColor,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = color,
                 maxLines = 1
             )
         }
     }
 }
 
-// ── Bottom: Antenna pointing section ─────────────────────────────────────────
+@Composable
+private fun SignalPill(state: TrackingUiState) {
+    val color by animateColorAsState(
+        when (state.signalState) {
+            SignalState.GPS_FIX -> MaterialTheme.colorScheme.primary
+            SignalState.RSSI_ONLY -> MaterialTheme.colorScheme.tertiary
+            SignalState.LOST_CONTACT -> MaterialTheme.colorScheme.error
+        }, label = "sigCol"
+    )
+    val label = when (state.signalState) {
+        SignalState.GPS_FIX -> rtkFixLabel(state.telemetry?.rtkFix)
+        SignalState.RSSI_ONLY -> if (state.rssiHasEstimate) "RSSI Est." else "RSSI Scan"
+        SignalState.LOST_CONTACT -> if (state.secondsSinceLastContact > 9000) "No Contact"
+        else "${state.secondsSinceLastContact}s ago"
+    }
+    StatusPill(label, color) {
+        Icon(
+            imageVector = when (state.signalState) {
+                SignalState.GPS_FIX -> Icons.Rounded.GpsFixed
+                SignalState.RSSI_ONLY -> Icons.Rounded.GpsOff
+                SignalState.LOST_CONTACT -> Icons.Rounded.SignalCellularOff
+            },
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(13.dp)
+        )
+    }
+}
 
 @Composable
-private fun AntennaPointingSection(modifier: Modifier, uiState: TrackingUiState) {
-    val animAz by animateFloatAsState(
-        targetValue = uiState.deviationAzimuth.toFloat(),
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 150f),
-        label = "az"
-    )
-    val animEl by animateFloatAsState(
-        targetValue = uiState.deviationElevation.toFloat(),
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 150f),
-        label = "el"
-    )
-
-    val inRssiScanMode = uiState.signalState == SignalState.RSSI_ONLY
-    val totalDev = sqrt(animAz * animAz + animEl * animEl)
-    val dotColor by animateColorAsState(
-        targetValue = when {
-            !uiState.distanceIsGps && !uiState.rssiHasEstimate -> MaterialTheme.colorScheme.outline
-            totalDev < 3f -> DotGood
-            totalDev < 12f -> DotOk
-            else -> DotBad
-        },
-        label = "dotColor"
-    )
-
-    val distanceStr = when {
-        uiState.distanceM < 1000 -> "%.0f m".format(uiState.distanceM)
-        else -> "%.2f km".format(uiState.distanceM / 1000)
+private fun FlightStatePill(state: Int) {
+    val color = flightStateColor(state)
+    StatusPill(flightStateName(state), color) {
+        Icon(Icons.Rounded.FlightTakeoff, null, tint = color, modifier = Modifier.size(13.dp))
     }
+}
 
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(RadarBackground.copy(alpha = 0.95f), RadarBackground)
-                )
-            )
-            .padding(top = 16.dp, start = 16.dp, end = 16.dp, bottom = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // ── Title row ─────────────────────────────────────────────────────────
-        val titleText = when {
-            uiState.distanceIsGps -> "Point Antenna"
-            uiState.rssiHasEstimate -> "RSSI Estimate"
-            inRssiScanMode -> "RSSI Scan — Slowly Pan 360°"
-            else -> "Awaiting Signal"
-        }
-        Text(
-            text = titleText,
-            style = MaterialTheme.typography.labelMedium,
-            color = Color.White.copy(alpha = 0.5f),
-            letterSpacing = 1.5.sp
+@Composable
+private fun PyroPill(continuity: Boolean, deployed: Boolean) {
+    val (label, color) = when {
+        deployed -> "Pyro Fired" to MaterialTheme.colorScheme.error
+        continuity -> "Pyro OK" to MaterialTheme.colorScheme.primary
+        else -> "Pyro DISC" to MaterialTheme.colorScheme.error
+    }
+    StatusPill(label, color)
+}
+
+@Composable
+private fun RssiModePill() {
+    StatusPill("RSSI Mode", MaterialTheme.colorScheme.tertiary) {
+        Icon(
+            Icons.Rounded.Tune, null,
+            tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(13.dp)
         )
+    }
+}
 
-        Spacer(modifier = Modifier.height(2.dp))
+// ── Metric cards ──────────────────────────────────────────────────────────────
 
-        // ── Distance / scan status row ────────────────────────────────────────
-        when {
-            uiState.distanceIsGps || uiState.rssiHasEstimate -> {
-                Row(
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = distanceStr,
-                        style = DataTextStyleLarge,
-                        color = if (uiState.distanceIsGps) Color(0xFF5DD5F0)
-                        else Color(0xFFFFB300)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (uiState.distanceIsGps) "GPS" else "~RSSI",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.4f),
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                }
-            }
+@Composable
+private fun BigMetricCard(
+    modifier: Modifier,
+    label: String,
+    value: Float,
+    formatValue: (Float) -> String,
+    trendThreshold: Float,
+    badge: String? = null,
+    clickLabel: String? = null,
+    onClick: (() -> Unit)? = null
+) {
+    val trend = rememberTrend(value, trendThreshold)
+    val animVal by animateFloatAsState(value, label = "bigMetric_$label")
 
-            inRssiScanMode -> {
-                // Show coverage progress bar
-                val coverage = uiState.rssiScanCoverage
-                val pct = (coverage * 100).toInt()
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Coverage: $pct%",
-                        style = DataTextStyleSmall,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                    if (uiState.rssiMaxRssi > -120) {
-                        Text(
-                            text = "Peak: ${uiState.rssiMaxRssi} dBm",
-                            style = DataTextStyleSmall,
-                            color = Color(0xFF4DD9E7).copy(alpha = 0.8f)
-                        )
-                    }
-                }
-            }
-
-            else -> {
+    Box(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = clickLabel) { onClick() } else Modifier)
+            .padding(12.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = distanceStr,
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                badge?.let {
+                    Text(
+                        it, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = trend.arrow(),
+                    style = TextStyle(
+                        fontFamily = FontFamily.Default,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        color = trend.color()
+                    )
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = formatValue(animVal),
                     style = DataTextStyleLarge,
-                    color = Color.White.copy(alpha = 0.3f)
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(8.dp))
+@Composable
+private fun MediumMetricCard(
+    modifier: Modifier,
+    label: String,
+    value: Float,
+    formatValue: (Float) -> String,
+    trendThreshold: Float
+) {
+    val trend = rememberTrend(value, trendThreshold)
+    val animVal by animateFloatAsState(value, label = "medMetric_$label")
 
-        // ── Reticle + deviation labels ────────────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            DeviationLabel(
-                modifier = Modifier.width(52.dp),
-                axis = "EL",
-                value = animEl,
-                positiveLabel = "UP",
-                negativeLabel = "DOWN",
-                valid = uiState.distanceIsGps || uiState.rssiHasEstimate
+    Box(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Column {
+            Text(
+                label, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = trend.arrow(),
+                    style = TextStyle(
+                        fontFamily = FontFamily.Default,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = trend.color()
+                    )
+                )
+                Spacer(Modifier.width(3.dp))
+                Text(
+                    text = formatValue(animVal),
+                    style = DataTextStyle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
 
-            val textMeasurer = rememberTextMeasurer()
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
-                    .drawBehind {
-                        drawReticle(
-                            textMeasurer = textMeasurer,
-                            azDev = animAz,
-                            elDev = animEl,
-                            dotColor = dotColor,
-                            hasGps = uiState.distanceIsGps,
-                            rssiHasEstimate = uiState.rssiHasEstimate,
-                            rssiAzimuthBins = uiState.rssiAzimuthBins,
-                            inScanMode = inRssiScanMode
-                        )
-                    }
+@Composable
+private fun RtkFixCard(modifier: Modifier, rtkFix: String?) {
+    val label = rtkFixLabel(rtkFix)
+    val color = when (rtkFix) {
+        "RTK-Fixed" -> MaterialTheme.colorScheme.primary
+        "RTK-Float" -> MaterialTheme.colorScheme.tertiary
+        "DGPS", "DgpsFix", "GPS", "GpsFix", "PPS", "PpsFix"
+            -> MaterialTheme.colorScheme.secondary
+
+        else -> MaterialTheme.colorScheme.error
+    }
+    Box(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Column {
+            Text(
+                "RTK Fix", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
-            DeviationLabel(
-                modifier = Modifier.width(52.dp),
-                axis = "AZ",
-                value = animAz,
-                positiveLabel = "RIGHT",
-                negativeLabel = "LEFT",
-                valid = uiState.distanceIsGps || uiState.rssiHasEstimate
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = label,
+                style = DataTextStyle,
+                color = color,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
             )
         }
     }
 }
 
 @Composable
-private fun DeviationLabel(
+private fun SmallMetricCard(
     modifier: Modifier,
+    label: String,
+    value: Float,
+    formatValue: (Float) -> String,
+    trendThreshold: Float
+) {
+    val trend = rememberTrend(value, trendThreshold)
+    val animVal by animateFloatAsState(value, label = "smMetric_$label")
+
+    Box(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Column {
+            Text(
+                label, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = trend.arrow(),
+                    style = TextStyle(
+                        fontFamily = FontFamily.Default,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = trend.color()
+                    )
+                )
+                Spacer(Modifier.width(2.dp))
+                Text(
+                    text = formatValue(animVal),
+                    style = DataTextStyleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+// ── Antenna pointing section ──────────────────────────────────────────────────
+
+@Composable
+private fun AntennaPointingSection(modifier: Modifier, uiState: TrackingUiState) {
+    val animAz by animateFloatAsState(
+        uiState.deviationAzimuth.toFloat(),
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 150f), label = "az"
+    )
+    val animEl by animateFloatAsState(
+        uiState.deviationElevation.toFloat(),
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 150f), label = "el"
+    )
+
+    val inRssiScanMode = uiState.signalState == SignalState.RSSI_ONLY
+    val totalDev = sqrt(animAz * animAz + animEl * animEl)
+    val dotColor by animateColorAsState(
+        when {
+            !uiState.distanceIsGps && !uiState.rssiHasEstimate -> MaterialTheme.colorScheme.outline
+            totalDev < 3f -> DotGood
+            totalDev < 12f -> DotOk
+            else -> DotBad
+        }, label = "dotC"
+    )
+
+    val distStr = if (uiState.distanceM < 1000) "%.0f m".format(uiState.distanceM)
+    else "%.2f km".format(uiState.distanceM / 1000)
+
+    // Container follows the MD3 surface token so it looks correct in both themes.
+    // Only the circular radar canvas stays always-dark (it IS a radar display).
+    val containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    val onContainer = MaterialTheme.colorScheme.onSurface
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+            .background(containerColor)
+            .padding(top = 12.dp, start = 14.dp, end = 14.dp, bottom = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // ── Title ─────────────────────────────────────────────────────────────
+        Text(
+            text = when {
+                uiState.distanceIsGps -> "Point Antenna"
+                uiState.rssiHasEstimate -> "RSSI Estimate"
+                inRssiScanMode -> "RSSI Scan — Slowly Pan 360°"
+                else -> "Awaiting Signal"
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = onContainer.copy(alpha = 0.45f),
+            letterSpacing = 1.5.sp
+        )
+        Spacer(Modifier.height(2.dp))
+
+        // ── Distance / scan-progress row ──────────────────────────────────────
+        when {
+            uiState.distanceIsGps || uiState.rssiHasEstimate -> {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        distStr,
+                        style = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 38.sp
+                        ),
+                        color = if (uiState.distanceIsGps) MaterialTheme.colorScheme.primary
+                        else Color(0xFFFFB300)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (uiState.distanceIsGps) "GPS" else "~RSSI",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = onContainer.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
+            }
+
+            inRssiScanMode -> {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Coverage: ${(uiState.rssiScanCoverage * 100).toInt()}%",
+                        style = DataTextStyleSmall,
+                        color = onContainer.copy(alpha = 0.7f)
+                    )
+                    if (uiState.rssiMaxRssi > -120) {
+                        Text(
+                            "Peak: ${uiState.rssiMaxRssi} dBm",
+                            style = DataTextStyleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            else -> Text(
+                distStr,
+                style = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 38.sp
+                ),
+                color = onContainer.copy(alpha = 0.2f)
+            )
+        }
+
+        Spacer(Modifier.height(6.dp))
+
+        // ── Dark radar canvas (fills remaining height, full width) ─────────────
+        val textMeasurer = rememberTextMeasurer()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF060D14))   // always dark — it is a radar display
+                .drawBehind {
+                    drawReticle(
+                        textMeasurer, animAz, animEl, dotColor,
+                        uiState.distanceIsGps, uiState.rssiHasEstimate,
+                        uiState.rssiAzimuthBins, inRssiScanMode
+                    )
+                }
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        // ── Deviation labels (below the canvas) ───────────────────────────────
+        val valid = uiState.distanceIsGps || uiState.rssiHasEstimate
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            DeviationBlock("ELEVATION", animEl, "UP", "DOWN", valid, onContainer)
+            // Vertical divider
+            Box(
+                Modifier
+                    .width(1.dp)
+                    .height(52.dp)
+                    .background(onContainer.copy(alpha = 0.15f))
+            )
+            DeviationBlock("AZIMUTH", animAz, "RIGHT", "LEFT", valid, onContainer)
+        }
+    }
+}
+
+@Composable
+private fun DeviationBlock(
     axis: String,
     value: Float,
     positiveLabel: String,
     negativeLabel: String,
-    valid: Boolean = true
+    valid: Boolean,
+    onSurface: Color
 ) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = axis,
+            axis,
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.4f),
-            letterSpacing = 1.sp
+            color = onSurface.copy(alpha = 0.4f),
+            letterSpacing = 1.5.sp
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             text = if (valid) "%+.1f°".format(value) else "—",
             style = TextStyle(
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                color = if (valid) Color.White else Color.White.copy(alpha = 0.3f)
+                fontSize = 26.sp,
+                color = if (valid) onSurface else onSurface.copy(alpha = 0.25f)
             )
         )
         if (valid) {
             Text(
-                text = if (value > 0.5f) positiveLabel else if (value < -0.5f) negativeLabel else "CENTER",
+                text = when {
+                    value > 0.5f -> positiveLabel
+                    value < -0.5f -> negativeLabel
+                    else -> "CENTER"
+                },
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF5DD5F0).copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                 fontSize = 9.sp
             )
         }
     }
 }
 
-// ── Canvas: the concentric circle aiming reticle ─────────────────────────────
+// ── Canvas reticle ────────────────────────────────────────────────────────────
 
 private fun DrawScope.drawReticle(
     textMeasurer: TextMeasurer,
-    azDev: Float,
-    elDev: Float,
+    azDev: Float, elDev: Float,
     dotColor: Color,
     hasGps: Boolean,
     rssiHasEstimate: Boolean = false,
@@ -523,117 +756,99 @@ private fun DrawScope.drawReticle(
     val cy = size.height / 2f
     val maxRadius = minOf(size.width, size.height) * 0.44f
 
-    // ── Scan coverage ring (outermost, drawn first so it's below grid) ────────
+    // Scan coverage ring
     if (inScanMode && rssiAzimuthBins.isNotEmpty()) {
-        val binRadius = maxRadius * 1.13f
-        val binSize = Size(binRadius * 2, binRadius * 2)
-        val binTopLeft = Offset(cx - binRadius, cy - binRadius)
+        val binR = maxRadius * 1.13f
+        val binSz = Size(binR * 2, binR * 2)
+        val binTL = Offset(cx - binR, cy - binR)
         rssiAzimuthBins.forEachIndexed { i, sampled ->
-            // Convert compass bin (0=north, CW) to canvas angle (0=right, CW)
-            val canvasStart = (i * 10f - 90f)
             drawArc(
                 color = if (sampled) DotGood.copy(alpha = 0.75f)
                 else Color(0xFF1A2A30).copy(alpha = 0.9f),
-                startAngle = canvasStart,
-                sweepAngle = 9f, // 10° bin - 1° gap
+                startAngle = i * 10f - 90f,
+                sweepAngle = 9f,
                 useCenter = false,
-                topLeft = binTopLeft,
-                size = binSize,
+                topLeft = binTL, size = binSz,
                 style = Stroke(width = 4.dp.toPx())
             )
         }
     }
 
-    // ── Degree rings ──────────────────────────────────────────────────────────
+    // Degree rings
     val ringDegs = listOf(5f, 10f, 15f, 20f, 30f)
     val maxDeg = 30f
-
     ringDegs.forEach { deg ->
         val r = (deg / maxDeg) * maxRadius
-        val alpha = 0.08f + 0.14f * (1f - deg / maxDeg)
         drawCircle(
-            color = RadarGrid.copy(alpha = alpha),
-            radius = r,
-            center = Offset(cx, cy),
-            style = Stroke(width = 1.dp.toPx())
+            color = RadarGrid.copy(alpha = 0.08f + 0.14f * (1f - deg / maxDeg)),
+            radius = r, center = Offset(cx, cy),
+            style = Stroke(1.dp.toPx())
         )
     }
 
-    // ── Crosshair ─────────────────────────────────────────────────────────────
-    val crossAlpha = 0.2f
-    drawLine(RadarGrid.copy(alpha = crossAlpha), Offset(cx - maxRadius, cy), Offset(cx + maxRadius, cy), 1.dp.toPx())
-    drawLine(RadarGrid.copy(alpha = crossAlpha), Offset(cx, cy - maxRadius), Offset(cx, cy + maxRadius), 1.dp.toPx())
+    // Crosshair
+    drawLine(RadarGrid.copy(0.2f), Offset(cx - maxRadius, cy), Offset(cx + maxRadius, cy), 1.dp.toPx())
+    drawLine(RadarGrid.copy(0.2f), Offset(cx, cy - maxRadius), Offset(cx, cy + maxRadius), 1.dp.toPx())
 
-    // ── Degree labels on each ring ────────────────────────────────────────────
-    val labelStyle = TextStyle(
-        fontFamily = FontFamily.Monospace,
-        fontSize = 9.sp,
+    // Degree labels
+    val lblStyle = TextStyle(
+        fontFamily = FontFamily.Monospace, fontSize = 9.sp,
         color = RadarGrid.copy(alpha = 0.6f)
     )
     ringDegs.forEach { deg ->
         val r = (deg / maxDeg) * maxRadius
-        val measured = textMeasurer.measure("${deg.toInt()}°", labelStyle)
-        val labelX = cx + r - measured.size.width - 4.dp.toPx()
-        val labelY = cy - measured.size.height / 2f
-        drawText(measured, topLeft = Offset(labelX, labelY))
+        val m = textMeasurer.measure("${deg.toInt()}°", lblStyle)
+        drawText(m, topLeft = Offset(cx + r - m.size.width - 4.dp.toPx(), cy - m.size.height / 2f))
     }
 
-    // ── Compass labels ────────────────────────────────────────────────────────
-    val compassLabels = listOf("N" to 0f, "E" to 90f, "S" to 180f, "W" to 270f)
-    compassLabels.forEach { (label, angleDeg) ->
-        val rad = Math.toRadians((angleDeg - 90).toDouble())
+    // Compass labels
+    listOf("N" to 0f, "E" to 90f, "S" to 180f, "W" to 270f).forEach { (lbl, ang) ->
+        val rad = Math.toRadians((ang - 90).toDouble())
         val lx = cx + (maxRadius + 8.dp.toPx()) * cos(rad).toFloat()
         val ly = cy + (maxRadius + 8.dp.toPx()) * sin(rad).toFloat()
         val m = textMeasurer.measure(
-            label, TextStyle(
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = RadarGrid.copy(alpha = 0.35f),
-                fontFamily = FontFamily.Monospace
+            lbl, TextStyle(
+                fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                color = RadarGrid.copy(alpha = 0.35f), fontFamily = FontFamily.Monospace
             )
         )
         drawText(m, topLeft = Offset(lx - m.size.width / 2f, ly - m.size.height / 2f))
     }
 
-    // ── Center status label when no target ────────────────────────────────────
+    // Center label when no target
     val noTargetLabel = when {
         inScanMode && !rssiHasEstimate -> "PAN TO SCAN"
         !hasGps && !rssiHasEstimate -> "NO TARGET"
         else -> null
     }
-    noTargetLabel?.let { label ->
+    noTargetLabel?.let { lbl ->
         val m = textMeasurer.measure(
-            label, TextStyle(
+            lbl, TextStyle(
                 fontSize = 10.sp,
-                color = RadarGrid.copy(alpha = 0.4f),
-                fontFamily = FontFamily.Monospace,
+                color = RadarGrid.copy(alpha = 0.4f), fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold
             )
         )
         drawText(m, topLeft = Offset(cx - m.size.width / 2f, cy + 14.dp.toPx()))
     }
 
-    // ── Deviation dot (only when we have a target) ────────────────────────────
     if (!hasGps && !rssiHasEstimate) return
 
-    val dotXFrac = (azDev / maxDeg).coerceIn(-1f, 1f)
-    val dotYFrac = (-elDev / maxDeg).coerceIn(-1f, 1f)
-    val dotX = cx + dotXFrac * maxRadius
-    val dotY = cy + dotYFrac * maxRadius
+    // Deviation dot
+    val dotX = cx + (azDev / maxDeg).coerceIn(-1f, 1f) * maxRadius
+    val dotY = cy + (-elDev / maxDeg).coerceIn(-1f, 1f) * maxRadius
 
     drawLine(
         color = dotColor.copy(alpha = 0.6f),
-        start = Offset(cx, cy),
-        end = Offset(dotX, dotY),
+        start = Offset(cx, cy), end = Offset(dotX, dotY),
         strokeWidth = 1.5.dp.toPx(),
         pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 5f))
     )
-
     drawCircle(dotColor.copy(alpha = 0.12f), 22.dp.toPx(), Offset(dotX, dotY))
     drawCircle(dotColor.copy(alpha = 0.25f), 12.dp.toPx(), Offset(dotX, dotY))
     drawCircle(dotColor, 5.dp.toPx(), Offset(dotX, dotY))
 
-    // ── Center bullseye ───────────────────────────────────────────────────────
+    // Bullseye
     drawCircle(Color.White.copy(alpha = 0.9f), 5.dp.toPx(), Offset(cx, cy), style = Stroke(1.5.dp.toPx()))
     drawCircle(Color.White.copy(alpha = 0.5f), 1.5.dp.toPx(), Offset(cx, cy))
 }

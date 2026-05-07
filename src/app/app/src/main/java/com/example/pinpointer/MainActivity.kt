@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.FlightTakeoff
 import androidx.compose.material.icons.rounded.Router
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -19,12 +20,14 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import com.example.pinpointer.data.remote.SopdetApi
@@ -33,6 +36,8 @@ import com.example.pinpointer.ui.basestation.BaseStationScreen
 import com.example.pinpointer.ui.commands.CommandsScreen
 import com.example.pinpointer.ui.connect.ConnectScreen
 import com.example.pinpointer.ui.data.DataScreen
+import com.example.pinpointer.ui.settings.AppSettings
+import com.example.pinpointer.ui.settings.SettingsScreen
 import com.example.pinpointer.ui.theme.PinPointerTheme
 import com.example.pinpointer.ui.tracking.TrackingScreen
 import com.example.pinpointer.ui.tracking.TrackingViewModel
@@ -47,31 +52,37 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            PinPointerTheme {
-                MainApp()
+            var settings by remember { mutableStateOf(AppSettings()) }
+            PinPointerTheme(themeMode = settings.themeMode) {
+                MainApp(settings = settings, onSettingsChange = { settings = it })
             }
         }
     }
 }
 
 @Composable
-fun MainApp() {
+fun MainApp(settings: AppSettings, onSettingsChange: (AppSettings) -> Unit) {
     var connectedIp by remember { mutableStateOf<String?>(null) }
 
     if (connectedIp == null) {
         ConnectScreen(onConnect = { ip -> connectedIp = ip })
     } else {
-        AppNavigation(connectedIp!!)
+        AppNavigation(
+            ip = connectedIp!!,
+            settings = settings,
+            onSettingsChange = onSettingsChange
+        )
     }
 }
 
-private data class NavDestination(
-    val label: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
-)
+private data class NavDestination(val label: String, val icon: ImageVector)
 
 @Composable
-fun AppNavigation(ip: String) {
+fun AppNavigation(
+    ip: String,
+    settings: AppSettings,
+    onSettingsChange: (AppSettings) -> Unit
+) {
     val context = LocalContext.current
 
     val api = remember(ip) {
@@ -94,11 +105,17 @@ fun AppNavigation(ip: String) {
         TrackingViewModel(repository, orientationTracker)
     }
 
+    // Keep the ViewModel's forceRssiOnly in sync with settings
+    LaunchedEffect(settings.forceRssiOnly) {
+        viewModel.setForceRssiOnly(settings.forceRssiOnly)
+    }
+
     val destinations = listOf(
         NavDestination("Tracking", Icons.Rounded.FlightTakeoff),
         NavDestination("Data", Icons.Rounded.BarChart),
         NavDestination("Commands", Icons.Rounded.Terminal),
-        NavDestination("Base Station", Icons.Rounded.Router)
+        NavDestination("Base Station", Icons.Rounded.Router),
+        NavDestination("Settings", Icons.Rounded.Settings)
     )
 
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -110,17 +127,13 @@ fun AppNavigation(ip: String) {
                     NavigationBarItem(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
-                        icon = {
-                            Icon(
-                                imageVector = dest.icon,
-                                contentDescription = dest.label
-                            )
-                        },
+                        icon = { Icon(dest.icon, contentDescription = dest.label) },
                         label = {
                             Text(
                                 text = dest.label,
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Normal
+                                fontWeight = if (selectedTab == index) FontWeight.SemiBold
+                                else FontWeight.Normal
                             )
                         }
                     )
@@ -138,6 +151,10 @@ fun AppNavigation(ip: String) {
                 1 -> DataScreen(viewModel)
                 2 -> CommandsScreen(viewModel)
                 3 -> BaseStationScreen(viewModel)
+                4 -> SettingsScreen(
+                    settings = settings,
+                    onSettingsChange = onSettingsChange
+                )
             }
         }
     }
