@@ -96,7 +96,10 @@ class TrackingViewModel(
         var targetElevation = 0.0
         var distanceIsGps = false
 
-        if (!forceRssi && telemetry != null && status?.gpsFix != null) {
+        if (!forceRssi && telemetry != null && status?.gpsFix != null
+            && telemetry.gpsLat != 0.0 && telemetry.gpsLon != 0.0
+            && status.gpsFix.latitude != 0.0
+        ) {
             val hDist = CoordinateMath.calculateDistance(
                 status.gpsFix.latitude, status.gpsFix.longitude,
                 telemetry.gpsLat, telemetry.gpsLon

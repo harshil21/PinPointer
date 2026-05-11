@@ -63,6 +63,11 @@ pub struct TelemetryLogEntry {
     pub rocket_gps_snr: Option<u8>,
     /// Average GPS SNR at the base station (Sopdet) — populated for all rows.
     pub base_gps_snr: Option<u8>,
+    /// Per-constellation base station SNR (dB-Hz). None = no GSV received yet.
+    pub base_snr_gps: Option<u8>,
+    pub base_snr_glonass: Option<u8>,
+    pub base_snr_galileo: Option<u8>,
+    pub base_snr_beidou: Option<u8>,
 
     // ── Uplink / fragment fields (TX only) ────────────────────────────────────
     /// Ground command bundled with this uplink (`"None"`, `"EmergencyLocate"`,

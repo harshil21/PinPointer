@@ -204,6 +204,7 @@ fun TrackingScreen(viewModel: TrackingViewModel) {
                 }
 
                 // ── Tier 2: RSSI + RTK ─────────────────────────────────────────
+                // ── Tier 2: RSSI + RTK + GPS SNR ─────────────────────────────────────────────────────────────────────
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -218,6 +219,12 @@ fun TrackingScreen(viewModel: TrackingViewModel) {
                     RtkFixCard(
                         modifier = Modifier.weight(1f),
                         rtkFix = t?.rtkFix
+                    )
+                    // Rocket GPS SNR from the downlink packet
+                    SmallMetricCard(
+                        Modifier.weight(1f), "Rkt SNR",
+                        (t?.gpsSNR ?: 0).toFloat(),
+                        { if (it > 0) "${it.toInt()} dBHz" else "—" }, 1f
                     )
                 }
 
@@ -578,10 +585,13 @@ private fun AntennaPointingSection(modifier: Modifier, uiState: TrackingUiState)
     val distStr = if (uiState.distanceM < 1000) "%.0f m".format(uiState.distanceM)
     else "%.2f km".format(uiState.distanceM / 1000)
 
-    // Container follows the MD3 surface token so it looks correct in both themes.
-    // Only the circular radar canvas stays always-dark (it IS a radar display).
-    val containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    // Container and radar canvas both follow the active theme — no hardcoded dark bg.
+    val containerColor = MaterialTheme.colorScheme.background
     val onContainer = MaterialTheme.colorScheme.onSurface
+    // Inside the canvas, derive radar grid colours from the primary token so
+    // they contrast with the background in both light and dark mode.
+    val radarGridColor = MaterialTheme.colorScheme.primary
+    val radarLabelColor = MaterialTheme.colorScheme.onSurface
 
     Column(
         modifier = modifier
@@ -668,12 +678,14 @@ private fun AntennaPointingSection(modifier: Modifier, uiState: TrackingUiState)
                 .fillMaxWidth()
                 .weight(1f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF060D14))   // always dark — it is a radar display
+                .background(MaterialTheme.colorScheme.surfaceContainer) // slight tint for the canvas area
                 .drawBehind {
                     drawReticle(
                         textMeasurer, animAz, animEl, dotColor,
                         uiState.distanceIsGps, uiState.rssiHasEstimate,
-                        uiState.rssiAzimuthBins, inRssiScanMode
+                        uiState.rssiAzimuthBins, inRssiScanMode,
+                        gridColor = radarGridColor,
+                        labelColor = radarLabelColor
                     )
                 }
         )
@@ -750,7 +762,9 @@ private fun DrawScope.drawReticle(
     hasGps: Boolean,
     rssiHasEstimate: Boolean = false,
     rssiAzimuthBins: List<Boolean> = emptyList(),
-    inScanMode: Boolean = false
+    inScanMode: Boolean = false,
+    gridColor: Color = RadarGrid,
+    labelColor: Color = Color.White
 ) {
     val cx = size.width / 2f
     val cy = size.height / 2f
@@ -764,7 +778,7 @@ private fun DrawScope.drawReticle(
         rssiAzimuthBins.forEachIndexed { i, sampled ->
             drawArc(
                 color = if (sampled) DotGood.copy(alpha = 0.75f)
-                else Color(0xFF1A2A30).copy(alpha = 0.9f),
+                else gridColor.copy(alpha = 0.15f),
                 startAngle = i * 10f - 90f,
                 sweepAngle = 9f,
                 useCenter = false,
@@ -780,20 +794,20 @@ private fun DrawScope.drawReticle(
     ringDegs.forEach { deg ->
         val r = (deg / maxDeg) * maxRadius
         drawCircle(
-            color = RadarGrid.copy(alpha = 0.08f + 0.14f * (1f - deg / maxDeg)),
+            color = gridColor.copy(alpha = 0.08f + 0.18f * (1f - deg / maxDeg)),
             radius = r, center = Offset(cx, cy),
             style = Stroke(1.dp.toPx())
         )
     }
 
     // Crosshair
-    drawLine(RadarGrid.copy(0.2f), Offset(cx - maxRadius, cy), Offset(cx + maxRadius, cy), 1.dp.toPx())
-    drawLine(RadarGrid.copy(0.2f), Offset(cx, cy - maxRadius), Offset(cx, cy + maxRadius), 1.dp.toPx())
+    drawLine(gridColor.copy(0.15f), Offset(cx - maxRadius, cy), Offset(cx + maxRadius, cy), 1.dp.toPx())
+    drawLine(gridColor.copy(0.15f), Offset(cx, cy - maxRadius), Offset(cx, cy + maxRadius), 1.dp.toPx())
 
     // Degree labels
     val lblStyle = TextStyle(
         fontFamily = FontFamily.Monospace, fontSize = 9.sp,
-        color = RadarGrid.copy(alpha = 0.6f)
+        color = labelColor.copy(alpha = 0.5f)
     )
     ringDegs.forEach { deg ->
         val r = (deg / maxDeg) * maxRadius
@@ -809,7 +823,7 @@ private fun DrawScope.drawReticle(
         val m = textMeasurer.measure(
             lbl, TextStyle(
                 fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                color = RadarGrid.copy(alpha = 0.35f), fontFamily = FontFamily.Monospace
+                color = labelColor.copy(alpha = 0.35f), fontFamily = FontFamily.Monospace
             )
         )
         drawText(m, topLeft = Offset(lx - m.size.width / 2f, ly - m.size.height / 2f))
@@ -825,7 +839,7 @@ private fun DrawScope.drawReticle(
         val m = textMeasurer.measure(
             lbl, TextStyle(
                 fontSize = 10.sp,
-                color = RadarGrid.copy(alpha = 0.4f), fontFamily = FontFamily.Monospace,
+                color = labelColor.copy(alpha = 0.4f), fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold
             )
         )
@@ -849,6 +863,6 @@ private fun DrawScope.drawReticle(
     drawCircle(dotColor, 5.dp.toPx(), Offset(dotX, dotY))
 
     // Bullseye
-    drawCircle(Color.White.copy(alpha = 0.9f), 5.dp.toPx(), Offset(cx, cy), style = Stroke(1.5.dp.toPx()))
-    drawCircle(Color.White.copy(alpha = 0.5f), 1.5.dp.toPx(), Offset(cx, cy))
+    drawCircle(gridColor.copy(alpha = 0.9f), 5.dp.toPx(), Offset(cx, cy), style = Stroke(1.5.dp.toPx()))
+    drawCircle(gridColor.copy(alpha = 0.5f), 1.5.dp.toPx(), Offset(cx, cy))
 }

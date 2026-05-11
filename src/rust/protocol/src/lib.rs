@@ -57,6 +57,9 @@
 pub const DOWNLINK_TYPE: u8 = 0x01;
 pub const UPLINK_TYPE: u8 = 0x02;
 pub const FRAG_TYPE: u8 = 0x03;
+/// Debug telemetry packet (Rocket → Ground).  Only transmitted when the
+/// ground station has activated debug mode via [`GroundCommand::EnableDebugTelemetry`].
+pub const DEBUG_TYPE: u8 = 0x04;
 
 /// Maximum RTCM data bytes in a single non-fragmented uplink
 /// (255 total − 3 header bytes).
@@ -148,6 +151,10 @@ pub enum GroundCommand {
     DeployEjectionCharge = 2,
     /// Deactivate the emergency locator buzzer on the rocket.
     EmergencyLocateOff = 3,
+    /// Ask the rocket to send per-constellation GPS SNR debug packets.
+    EnableDebugTelemetry = 4,
+    /// Stop sending debug packets.
+    DisableDebugTelemetry = 5,
 }
 
 impl GroundCommand {
@@ -157,6 +164,8 @@ impl GroundCommand {
             1 => GroundCommand::EmergencyLocate,
             2 => GroundCommand::DeployEjectionCharge,
             3 => GroundCommand::EmergencyLocateOff,
+            4 => GroundCommand::EnableDebugTelemetry,
+            5 => GroundCommand::DisableDebugTelemetry,
             _ => GroundCommand::None,
         }
     }
@@ -174,6 +183,8 @@ impl core::fmt::Display for GroundCommand {
             GroundCommand::EmergencyLocate => f.write_str("EmergencyLocate"),
             GroundCommand::DeployEjectionCharge => f.write_str("DeployEjectionCharge"),
             GroundCommand::EmergencyLocateOff => f.write_str("EmergencyLocateOff"),
+            GroundCommand::EnableDebugTelemetry => f.write_str("EnableDebugTelemetry"),
+            GroundCommand::DisableDebugTelemetry => f.write_str("DisableDebugTelemetry"),
         }
     }
 }
@@ -271,9 +282,62 @@ impl DownlinkPacket {
     }
 }
 
-// ── UplinkPacket ──────────────────────────────────────────────────────────────
+// ── DebugDownlinkPacket ────────────────────────────────────────────────────────
 
-/// Packet sent from the ground station to the rocket.
+/// Per-constellation GPS SNR debug packet, sent by the rocket only while
+/// [`GroundCommand::EnableDebugTelemetry`] is active.
+///
+/// # Wire layout (8 bytes, fixed)
+/// ```text
+///  [0]    type     u8 = 0x04
+///  [1-2]  seq_num  u16  (matches the concurrent DownlinkPacket sequence)
+///  [3]    gps      u8   GPS / NAVSTAR average SNR (dB-Hz)
+///  [4]    glonass  u8   GLONASS
+///  [5]    galileo  u8   Galileo
+///  [6]    beidou   u8   BeiDou
+///  [7]    qzss     u8   QZSS
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct DebugDownlinkPacket {
+    pub sequence_num: u16,
+    pub gps: u8,
+    pub glonass: u8,
+    pub galileo: u8,
+    pub beidou: u8,
+    pub qzss: u8,
+}
+
+impl DebugDownlinkPacket {
+    pub const SIZE: usize = 8;
+
+    pub fn serialize(&self) -> [u8; Self::SIZE] {
+        let mut b = [0u8; Self::SIZE];
+        b[0] = DEBUG_TYPE;
+        b[1..3].copy_from_slice(&self.sequence_num.to_le_bytes());
+        b[3] = self.gps;
+        b[4] = self.glonass;
+        b[5] = self.galileo;
+        b[6] = self.beidou;
+        b[7] = self.qzss;
+        b
+    }
+
+    pub fn deserialize(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < Self::SIZE || bytes[0] != DEBUG_TYPE {
+            return None;
+        }
+        Some(DebugDownlinkPacket {
+            sequence_num: u16::from_le_bytes([bytes[1], bytes[2]]),
+            gps: bytes[3],
+            glonass: bytes[4],
+            galileo: bytes[5],
+            beidou: bytes[6],
+            qzss: bytes[7],
+        })
+    }
+}
+
+// ── UplinkPacket ────────────────────────────────────────────────────────────
 ///
 /// Carries an optional [`GroundCommand`] and/or a small inline RTCM correction
 /// payload.  When the RTCM data for a single epoch is larger than

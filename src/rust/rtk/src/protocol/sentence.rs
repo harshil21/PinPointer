@@ -1,7 +1,12 @@
 use crate::protocol::commands::{PQTMCfgMsgRate, PQTMCfgSvin};
 use crate::protocol::helpers::{StatusField, parse_status_and_rest, wrap_sentence};
-use crate::protocol::response::{PQTMEpe, PQTMResponse, PQTMSvinStatus, PQTMVerNo, ParseError, PQTMModuleError};
-use crate::protocol::pair::{PairCommand, PairResponse, PairRequestAiding, PairACK, PairRTCMSetOutputMode, PairRTCMSetOutputAntPnt, PairRTCMSetOutputEphemeris};
+use crate::protocol::pair::{
+    PairACK, PairCommand, PairCommonSetNmeaOutputRate, PairRTCMSetOutputAntPnt,
+    PairRTCMSetOutputEphemeris, PairRTCMSetOutputMode, PairRequestAiding, PairResponse,
+};
+use crate::protocol::response::{
+    PQTMEpe, PQTMModuleError, PQTMResponse, PQTMSvinStatus, PQTMVerNo, ParseError,
+};
 
 use super::commands::PQTMCommand;
 use super::helpers::unwrap_sentence;
@@ -25,6 +30,8 @@ impl Serialize for PQTMCommand {
             PQTMCommand::Verno => wrap_sentence("PQTMVERNO"),
             PQTMCommand::CfgMsgRateWrite(cfg) => wrap_sentence(&cfg.to_fields()),
             PQTMCommand::CfgMsgRateRead(cfg_get) => wrap_sentence(&cfg_get.to_fields()),
+            PQTMCommand::CfgRcvrModeRead => wrap_sentence("PQTMCFGRCVRMODE"),
+            PQTMCommand::CfgRcvrModeWrite(cfg) => wrap_sentence(&cfg.to_fields()),
         }
     }
 }
@@ -46,12 +53,14 @@ impl Deserialize for PQTMResponse {
                 StatusField::Ok(_) => Ok(PQTMResponse::RestoreParOk),
                 StatusField::Err(e) => Ok(PQTMResponse::RestoreParError(e)),
             },
-            "PQTMVERNO" => { // This does unfortunately not follow the OK/ERROR pattern
+            "PQTMVERNO" => {
+                // This does unfortunately not follow the OK/ERROR pattern
                 // Check if first field is "ERROR"
                 let first = parts.clone().next().ok_or(ParseError::NoSentence)?;
                 if first == "ERROR" {
                     parts.next(); // skip "ERROR"
-                    let code: u8 = parts.next()
+                    let code: u8 = parts
+                        .next()
                         .ok_or(ParseError::NoErrorCode)?
                         .parse()
                         .map_err(|_| ParseError::NoErrorCode)?;
@@ -61,7 +70,7 @@ impl Deserialize for PQTMResponse {
                     let verno = PQTMVerNo::from_fields(&mut parts)?;
                     Ok(PQTMResponse::Verno(verno))
                 }
-            },
+            }
             "PQTMCFGSVIN" => {
                 match parse_status_and_rest(parts)? {
                     StatusField::Ok(mut rest) => {
@@ -98,6 +107,10 @@ impl Deserialize for PQTMResponse {
             "PQTMSVINSTATUS" => Ok(PQTMResponse::SvinStatus(PQTMSvinStatus::from_fields(
                 &mut parts,
             )?)),
+            "PQTMCFGRCVRMODE" => match parse_status_and_rest(parts)? {
+                StatusField::Ok(_) => Ok(PQTMResponse::CfgRcvrModeWriteOk),
+                StatusField::Err(e) => Ok(PQTMResponse::CfgRcvrError(e)),
+            },
             _ => Err(ParseError::ParsingError("Unknown sentence header")),
         }
     }
@@ -112,8 +125,10 @@ impl Serialize for PairCommand {
             PairCommand::RtcmGetOutputAntPnt => wrap_sentence("PAIR435"),
             PairCommand::RtcmSetOutputEphemeris(cfg) => wrap_sentence(&cfg.to_fields()),
             PairCommand::RtcmGetOutputEphemeris => wrap_sentence("PAIR437"),
+            PairCommand::NvramSaveSetting => wrap_sentence("PAIR513"),
+            PairCommand::CommonSetNmeaOutputRate(cfg) => wrap_sentence(&cfg.to_fields()),
         }
-    } 
+    }
 }
 
 impl Deserialize for PairResponse {

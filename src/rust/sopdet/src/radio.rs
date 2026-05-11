@@ -18,13 +18,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use protocol::{
-    DOWNLINK_TYPE, DownlinkPacket, GroundCommand, MAX_FRAG_DATA, MAX_UPLINK_RTK, RtcmFragment,
-    UplinkPacket,
+    DEBUG_TYPE, DOWNLINK_TYPE, DebugDownlinkPacket, DownlinkPacket, GroundCommand, MAX_FRAG_DATA,
+    MAX_UPLINK_RTK, RtcmFragment, UplinkPacket,
 };
 use rfm95::{Bandwidth, LoraConfig, Rfm95, SpreadingFactor};
 
 use crate::logger::{Logger, TelemetryLogEntry};
-use crate::state::{AppState, TelemetryEntry};
+use crate::state::{AppState, RocketDebugSnr, TelemetryEntry};
 
 // ── Timing constants ──────────────────────────────────────────────────────────
 
@@ -107,6 +107,29 @@ pub fn run_radio_thread(
                             pkt.payload.len()
                         ),
                     }
+                } else if pkt.payload[0] == DEBUG_TYPE {
+                    match DebugDownlinkPacket::deserialize(&pkt.payload) {
+                        Some(dbg) => {
+                            log::debug!(
+                                "[radio] Debug SNR — GPS={} GL={} GA={} GB={} GQ={}",
+                                dbg.gps,
+                                dbg.glonass,
+                                dbg.galileo,
+                                dbg.beidou,
+                                dbg.qzss
+                            );
+                            if let Ok(mut s) = state.lock() {
+                                s.rocket_debug_snr = Some(RocketDebugSnr {
+                                    gps: dbg.gps,
+                                    glonass: dbg.glonass,
+                                    galileo: dbg.galileo,
+                                    beidou: dbg.beidou,
+                                    qzss: dbg.qzss,
+                                });
+                            }
+                        }
+                        None => log::warn!("Debug packet deserialisation failed"),
+                    }
                 } else {
                     // Silently ignore packets we didn't send (e.g. stray uplinks
                     // echoed back, or foreign LoRa traffic on the same frequency).
@@ -187,7 +210,7 @@ fn handle_downlink(
 
     log::info!(
         "RX DOWNLINK seq={} alt={:.1}m vel={:.1}m/s state={} fix={} \
-         pyro_dep={} rssi={}dBm snr={:.1}dB rocket_snr={}dBHz",
+         pyro_dep={} rssi={}dBm snr={:.1}dB gps_snr={}dBHz",
         dl.sequence_num,
         dl.altitude_m,
         dl.velocity_mps,
@@ -222,7 +245,7 @@ fn handle_downlink(
     let base_snr = if let Ok(mut s) = state.lock() {
         s.last_downlink_rssi = Some(rssi);
         s.add_telemetry(entry);
-        s.gps_snr
+        s.gps_snr.average_active()
     } else {
         0
     };

@@ -158,12 +158,18 @@ impl Default for LoraConfig {
 impl LoraConfig {
     /// Preset for 433 MHz band.
     pub fn with_frequency_433() -> Self {
-        Self { frequency: 433_000_000, ..Default::default() }
+        Self {
+            frequency: 433_000_000,
+            ..Default::default()
+        }
     }
 
     /// Preset for 868 MHz band (EU).
     pub fn with_frequency_868() -> Self {
-        Self { frequency: 868_000_000, ..Default::default() }
+        Self {
+            frequency: 868_000_000,
+            ..Default::default()
+        }
     }
 
     /// Preset for 915 MHz band (US/AU).
@@ -210,8 +216,7 @@ impl LoraConfig {
             Bandwidth::Bw500kHz => 500_000,
         };
         // Symbol duration = 2^SF / BW. Mandatory when > 16 ms.
-        let symbol_duration_us =
-            (1u64 << self.spreading_factor as u32) * 1_000_000 / bw_hz as u64;
+        let symbol_duration_us = (1u64 << self.spreading_factor as u32) * 1_000_000 / bw_hz as u64;
         symbol_duration_us > 16_000
     }
 }

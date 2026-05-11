@@ -38,8 +38,8 @@ use std::time::{Duration, Instant};
 use rfm95::{Bandwidth, LoraConfig, Rfm95, Rfm95Error, SpreadingFactor};
 
 use protocol::{
-    DOWNLINK_TYPE, DownlinkPacket, FRAG_TYPE, GroundCommand, RtcmFragment, UPLINK_TYPE,
-    UplinkPacket,
+    DEBUG_TYPE, DOWNLINK_TYPE, DebugDownlinkPacket, DownlinkPacket, FRAG_TYPE, GroundCommand,
+    RtcmFragment, UPLINK_TYPE, UplinkPacket,
 };
 
 use crate::data_processor::FlightData;
@@ -217,6 +217,9 @@ pub fn run_radio_thread(
 ) {
     log::info!("[radio] Thread started");
 
+    // Local debug-mode flag — toggled by EnableDebugTelemetry / DisableDebugTelemetry.
+    let debug_mode = Arc::new(AtomicBool::new(false));
+
     // Apply SF7 / BW500 configuration.
     if let Err(e) = radio.configure(&initial_config()) {
         log::error!("[radio] Initial configure failed: {}", e);
@@ -289,6 +292,10 @@ pub fn run_radio_thread(
         // ── 3. Periodic downlink TX ───────────────────────────────────────────
         if last_tx.elapsed() >= TX_INTERVAL {
             transmit_downlink(&mut radio, &flight_data, &mut tx_sequence, &tx_log_tx, boot);
+            // If debug mode is active, follow up with the debug packet.
+            if debug_mode.load(Ordering::Relaxed) {
+                transmit_debug(&mut radio, &flight_data, tx_sequence.wrapping_sub(1));
+            }
             last_tx = Instant::now();
         }
 
@@ -356,6 +363,16 @@ fn handle_received(
                             log::warn!("[radio] DeployEjectionCharge command received!");
                             deploy_flag.store(true, Ordering::Relaxed);
                         }
+
+                        GroundCommand::EnableDebugTelemetry => {
+                            log::info!("[radio] Debug telemetry ENABLED");
+                            debug_mode.store(true, Ordering::Relaxed);
+                        }
+
+                        GroundCommand::DisableDebugTelemetry => {
+                            log::info!("[radio] Debug telemetry DISABLED");
+                            debug_mode.store(false, Ordering::Relaxed);
+                        }
                     }
 
                     // Log the raw bytes.
@@ -407,7 +424,29 @@ fn handle_received(
     }
 }
 
-// ── Downlink transmitter ──────────────────────────────────────────────────────
+// ── Debug downlink transmitter ───────────────────────────────────────────────
+
+fn transmit_debug(radio: &mut Rfm95, flight_data: &Arc<Mutex<FlightData>>, seq: u16) {
+    let bytes = {
+        let data = flight_data.lock().unwrap();
+        DebugDownlinkPacket {
+            sequence_num: seq,
+            gps: data.gps_snr_gps,
+            glonass: data.gps_snr_glonass,
+            galileo: data.gps_snr_galileo,
+            beidou: data.gps_snr_beidou,
+            qzss: data.gps_snr_qzss,
+        }
+        .serialize()
+        .to_vec()
+    };
+    if let Err(e) = radio.transmit(&bytes) {
+        log::warn!("[radio] Debug TX error: {}", e);
+    }
+    if let Err(e) = radio.start_receive_continuous() {
+        log::warn!("[radio] RX restart after debug TX: {}", e);
+    }
+}
 
 fn transmit_downlink(
     radio: &mut Rfm95,

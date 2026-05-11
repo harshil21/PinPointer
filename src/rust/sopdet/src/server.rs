@@ -1,8 +1,5 @@
 //! Synchronous HTTP server for the sopdet ground station.
 //!
-//! Exposes a simple JSON API over Wi-Fi that the Android app connects to.
-//! No authentication is required.
-//!
 //! # Endpoints
 //!
 //! | Method | Path                  | Description                                      |
@@ -12,14 +9,15 @@
 //! | GET    | `/telemetry/latest`   | Most recently received downlink packet           |
 //! | GET    | `/telemetry/history`  | All buffered packets (`?limit=N`, default 100)   |
 //! | POST   | `/command/emergency`  | Queue an `EmergencyLocate` command               |
+//! | POST   | `/command/emergency/off` | Queue `EmergencyLocateOff`                    |
 //! | POST   | `/command/deploy`     | Queue a `DeployEjectionCharge` command           |
-//!
-//! All responses are JSON with `Content-Type: application/json` and
-//! `Access-Control-Allow-Origin: *` (for cross-origin Android WebView requests).
+//! | POST   | `/resurvey`           | Restart GPS survey-in                            |
+//! | POST   | `/config/svin`        | Set survey-in duration `{"duration_s": N}`       |
 
+use std::io::Read;
 use std::sync::{Arc, Mutex};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tiny_http::{Header, Request, Response, Server};
 
 use crate::logger::{AccessLogEntry, Logger};
@@ -51,23 +49,40 @@ struct TelemetryJson {
     rssi: i16,
     /// Signal-to-noise ratio (dB).
     snr: f32,
+    /// Average GPS SNR on the rocket (dB-Hz), from NMEA GSV via downlink.
+    gps_snr: u8,
+}
+
+/// Per-constellation GPS SNR, sent as part of the status response.
+#[derive(Serialize)]
+struct ConstellationSnrJson {
+    gps: u8,
+    glonass: u8,
+    galileo: u8,
+    beidou: u8,
+    qzss: u8,
+    /// Average of GPS + GLONASS + Galileo + BeiDou, excluding those with SNR == 0.
+    average: u8,
 }
 
 /// Serialisable station-status snapshot.
 #[derive(Serialize)]
 struct StatusJson {
-    /// Seconds since sopdet started.
     uptime_seconds: u64,
-    /// True once the GPS survey-in has fully converged.
     svin_complete: bool,
-    /// True while the GPS survey-in is actively in progress.
     svin_active: bool,
-    /// Latest GPS fix from the base-station LC29H (null if not yet received).
+    /// Live survey-in accuracy (m). 0 until first $PQTMSVINSTATUS arrives.
+    svin_accuracy_m: f32,
+    svin_observations: u32,
+    svin_elapsed_s: u32,
     gps_fix: Option<GpsFixJson>,
-    /// Number of downlink telemetry packets buffered in memory.
     telemetry_count: usize,
-    /// RSSI of the most recently received downlink packet (null if none yet).
     last_downlink_rssi: Option<i16>,
+    /// Per-constellation SNR at the base station.
+    gps_snr: ConstellationSnrJson,
+    svin_duration_s: u32,
+    /// Per-constellation SNR from the rocket (via debug packets). None = debug mode off.
+    rocket_debug_snr: Option<ConstellationSnrJson>,
 }
 
 /// Serialisable GPS fix snapshot.
@@ -93,6 +108,19 @@ struct CommandResponse {
 #[derive(Serialize)]
 struct ResurveyResponse {
     status: &'static str,
+}
+
+/// Returned by POST /config/svin on success.
+#[derive(Serialize)]
+struct SvinConfigResponse {
+    status: &'static str,
+    duration_s: u32,
+}
+
+/// Body accepted by POST /config/svin.
+#[derive(Deserialize)]
+struct SvinConfigBody {
+    duration_s: u32,
 }
 
 /// Returned for any error condition.
@@ -132,7 +160,7 @@ pub fn run_server(addr: &str, state: Arc<Mutex<AppState>>, logger: Logger) {
 
 // ── Request dispatch ──────────────────────────────────────────────────────────
 
-fn handle_request(request: Request, state: &Arc<Mutex<AppState>>, logger: &Logger) {
+fn handle_request(mut request: Request, state: &Arc<Mutex<AppState>>, logger: &Logger) {
     // Capture metadata before consuming the request.
     let method = request.method().to_string();
     let full_url = request.url().to_string();
@@ -140,6 +168,10 @@ fn handle_request(request: Request, state: &Arc<Mutex<AppState>>, logger: &Logge
         .remote_addr()
         .map(|a| a.to_string())
         .unwrap_or_else(|| "unknown".to_string());
+
+    // Read body before consuming the request (needed for POST /config/svin).
+    let mut body_str = String::new();
+    let _ = request.as_reader().read_to_string(&mut body_str);
 
     // Split path from query string.
     let (path, query) = match full_url.find('?') {
@@ -150,7 +182,13 @@ fn handle_request(request: Request, state: &Arc<Mutex<AppState>>, logger: &Logge
         None => (full_url.clone(), None),
     };
 
-    let (status_code, body) = route(method.as_str(), path.as_str(), query.as_deref(), state);
+    let (status_code, body) = route(
+        method.as_str(),
+        path.as_str(),
+        query.as_deref(),
+        body_str.as_str(),
+        state,
+    );
 
     // Build response with JSON content type and permissive CORS header.
     let content_type: Header = "Content-Type: application/json"
@@ -186,6 +224,7 @@ fn route(
     method: &str,
     path: &str,
     query: Option<&str>,
+    body: &str,
     state: &Arc<Mutex<AppState>>,
 ) -> (u16, String) {
     match (method, path) {
@@ -206,9 +245,37 @@ fn route(
                 uptime_seconds: s.uptime_start.elapsed().as_secs(),
                 svin_complete: s.svin_complete,
                 svin_active: s.svin_active,
+                svin_accuracy_m: s.svin_accuracy_m,
+                svin_observations: s.svin_observations,
+                svin_elapsed_s: s.svin_elapsed_s,
                 gps_fix,
                 telemetry_count: s.telemetry.len(),
                 last_downlink_rssi: s.last_downlink_rssi,
+                gps_snr: ConstellationSnrJson {
+                    gps: s.gps_snr.gps,
+                    glonass: s.gps_snr.glonass,
+                    galileo: s.gps_snr.galileo,
+                    beidou: s.gps_snr.beidou,
+                    qzss: s.gps_snr.qzss,
+                    average: s.gps_snr.average_active(),
+                },
+                svin_duration_s: s.svin_min_duration_s,
+                rocket_debug_snr: s.rocket_debug_snr.as_ref().map(|d| ConstellationSnrJson {
+                    gps: d.gps,
+                    glonass: d.glonass,
+                    galileo: d.galileo,
+                    beidou: d.beidou,
+                    qzss: d.qzss,
+                    average: {
+                        let vals = [d.gps, d.glonass, d.galileo, d.beidou];
+                        let (s, c) = vals
+                            .iter()
+                            .copied()
+                            .filter(|&v| v > 0)
+                            .fold((0u16, 0u16), |(s, c), v| (s + v as u16, c + 1));
+                        if c == 0 { 0 } else { (s / c) as u8 }
+                    },
+                }),
             };
 
             (
@@ -301,13 +368,11 @@ fn route(
         }
 
         // ── Re-survey base station position ───────────────────────────────────
-        // Use this after moving the base station.  Resets the survey-in state
-        // and instructs the GPS thread to re-run the full configuration sequence.
         ("POST", "/resurvey") => {
             if let Ok(mut s) = state.lock() {
                 s.resurvey_requested = true;
                 s.svin_complete = false;
-                s.svin_active = false;
+                s.svin_active = true; // optimistic — GPS thread will correct if needed
                 log::info!("HTTP: resurvey requested — GPS survey-in will restart");
             }
             (
@@ -318,6 +383,26 @@ fn route(
                 .unwrap_or_else(|e| error_json(&e.to_string())),
             )
         }
+
+        // ── Configure survey-in duration ──────────────────────────────────────
+        ("POST", "/config/svin") => match serde_json::from_str::<SvinConfigBody>(body) {
+            Ok(cfg) => {
+                let duration_s = cfg.duration_s.clamp(10, 600);
+                if let Ok(mut s) = state.lock() {
+                    s.svin_min_duration_s = duration_s;
+                    log::info!("HTTP: survey-in duration set to {}s", duration_s);
+                }
+                (
+                    200,
+                    serde_json::to_string(&SvinConfigResponse {
+                        status: "ok",
+                        duration_s,
+                    })
+                    .unwrap_or_else(|e| error_json(&e.to_string())),
+                )
+            }
+            Err(e) => (400, error_json(&format!("invalid body: {}", e))),
+        },
 
         // ── OPTIONS preflight (for browsers / WebView CORS) ──────────────────
         ("OPTIONS", _) => (204, String::new()),
@@ -347,6 +432,7 @@ fn entry_to_json(e: &crate::state::TelemetryEntry) -> TelemetryJson {
         flight_state: e.flight_state,
         rssi: e.rssi,
         snr: e.snr,
+        gps_snr: e.gps_snr,
     }
 }
 

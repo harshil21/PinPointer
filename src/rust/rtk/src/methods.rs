@@ -1,13 +1,16 @@
-
 use std::time::Duration;
 
-use crate::protocol::commands::{PQTMCommand, PQTMCfgMsgRate, PQTMCfgMsgRateGet, PQTMCfgSvin};
+use crate::protocol::commands::{
+    PQTMCfgMsgRate, PQTMCfgMsgRateGet, PQTMCfgRcvrMode, PQTMCfgSvin, PQTMCommand,
+};
+use crate::protocol::pair::{
+    AckResult, PairACK, PairCommand, PairCommonSetNmeaOutputRate, PairRTCMSetOutputAntPnt,
+    PairRTCMSetOutputEphemeris, PairRTCMSetOutputMode, PairResponse, RtcmAntPnt, RtcmEphemeris,
+    RtcmMode,
+};
 use crate::protocol::response::{PQTMResponse, PQTMVerNo, ParseError, ResponseError};
-use crate::protocol::pair::{PairCommand, PairResponse, PairACK, AckResult, PairRTCMSetOutputMode, PairRTCMSetOutputAntPnt, PairRTCMSetOutputEphemeris, RtcmMode, RtcmAntPnt, RtcmEphemeris};
-
 
 use crate::port::BaseGPS;
-
 
 macro_rules! command_methods {
     (
@@ -61,14 +64,14 @@ macro_rules! pair_get_methods {
                 timeout: Duration,
             ) -> Result<$return_type, ResponseError> {
                 let (ack, resp) = self.send_pair_get($command_variant, timeout)?;
-                
+
                 // Validate ACK is success (already checked in send_pair_get, but be explicit)
                 if ack.result != AckResult::Success {
                     return Err(ResponseError::ParseError(
                         ParseError::ParsingError("PAIR command ACK failed")
                     ));
                 }
-                
+
                 match resp {
                     $response_pattern => Ok($response_expr),
                     _ => Err(ResponseError::ParseError(
@@ -105,9 +108,7 @@ macro_rules! pair_set_methods {
     };
 }
 
-
 impl BaseGPS {
-    
     command_methods! {
         verno() -> PQTMVerNo {
             command: PQTMCommand::Verno,
@@ -150,6 +151,12 @@ impl BaseGPS {
             ok: PQTMResponse::CfgMsgRateReadOk(rate) => rate,
             err: PQTMResponse::CfgMsgRateError(e) => e,
         }
+
+        cfg_rcvrmode_write(mode: PQTMCfgRcvrMode) -> () {
+            command: PQTMCommand::CfgRcvrModeWrite(mode),
+            ok: PQTMResponse::CfgRcvrModeWriteOk => (),
+            err: PQTMResponse::CfgRcvrError(e) => e,
+        }
     }
     // PAIR GET commands (wait for ACK + response)
     pair_get_methods! {
@@ -181,6 +188,14 @@ impl BaseGPS {
 
         pair_set_rtcm_ephemeris(ephemeris: PairRTCMSetOutputEphemeris) {
             command: PairCommand::RtcmSetOutputEphemeris(ephemeris),
+        }
+
+        pair_nvram_save_setting() {
+            command: PairCommand::NvramSaveSetting,
+        }
+
+        pair_common_set_nmea_output_rate(rate: PairCommonSetNmeaOutputRate) {
+            command: PairCommand::CommonSetNmeaOutputRate(rate),
         }
     }
 }

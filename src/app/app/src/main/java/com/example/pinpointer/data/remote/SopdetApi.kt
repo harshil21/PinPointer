@@ -26,6 +26,9 @@ interface SopdetApi {
     @POST("/command/deploy")
     suspend fun sendDeployEjection(): CommandResponse
 
+    @POST("/config/svin")
+    suspend fun setSvinDuration(@retrofit2.http.Body body: com.example.pinpointer.data.model.SvinConfigBody): CommandResponse
+
     @POST("/resurvey")
     suspend fun requestResurvey(): CommandResponse
 }

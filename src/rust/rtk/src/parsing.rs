@@ -1,4 +1,4 @@
-use crate::protocol::nmea::{GgaData, GsvData, GsvSatellite};
+use crate::protocol::nmea::{GgaData, GsvConstellation, GsvData, GsvSatellite};
 use crate::protocol::pair::PairResponse;
 use crate::protocol::response::{PQTMResponse, WireMessage};
 use crate::protocol::sentence::Deserialize;
@@ -11,13 +11,16 @@ struct GsvAccumulator {
     total_msgs: u8,
     /// Satellites collected so far.
     satellites: Vec<GsvSatellite>,
+    /// Which constellation this sequence is for (from the talker ID).
+    constellation: GsvConstellation,
 }
 
 impl GsvAccumulator {
-    fn new(total_msgs: u8) -> Self {
+    fn new(total_msgs: u8, constellation: GsvConstellation) -> Self {
         Self {
             total_msgs,
             satellites: Vec::new(),
+            constellation,
         }
     }
 }
@@ -67,14 +70,19 @@ impl PQTMParser {
 
             // g. Dispatch by sentence type.
             if sentence.starts_with("$PQTM") {
+                log::debug!(
+                    "[PARSER] PQTM sentence: {}",
+                    &sentence[..sentence.len().min(80)]
+                );
                 match PQTMResponse::from_sentence(sentence) {
                     Ok(resp) => {
                         outputs.push(WireMessage::PQTMMessage(resp));
                     }
                     Err(e) => {
-                        eprintln!(
-                            "Failed to parse PQTM Response: {:?}, Error: {:?}",
-                            sentence, e
+                        log::warn!(
+                            "[PARSER] Failed to parse PQTM sentence '{}': {:?}",
+                            &sentence[..sentence.len().min(80)],
+                            e
                         );
                     }
                 }
@@ -84,9 +92,10 @@ impl PQTMParser {
                         outputs.push(WireMessage::PairMessage(pair));
                     }
                     Err(e) => {
-                        eprintln!(
-                            "Failed to parse PAIR Message: {:?}, Error: {:?}",
-                            sentence, e
+                        log::warn!(
+                            "[PARSER] Failed to parse PAIR sentence '{}': {:?}",
+                            &sentence[..sentence.len().min(80)],
+                            e
                         );
                     }
                 }
@@ -95,7 +104,20 @@ impl PQTMParser {
                     outputs.push(WireMessage::NmeaGga(gga));
                 }
             } else if sentence.get(3..6) == Some("GSV") {
-                if let Some(gsv) = self.parse_gsv(sentence) {
+                let constellation = sentence
+                    .get(1..3)
+                    .map(GsvConstellation::from_talker)
+                    .unwrap_or(GsvConstellation::Unknown);
+                log::debug!(
+                    "[PARSER] GSV sentence arrived ({}): {}",
+                    &sentence[..sentence.len().min(8)],
+                    &sentence[..sentence.len().min(120)]
+                );
+                if let Some(gsv) = self.parse_gsv(sentence, constellation) {
+                    log::debug!(
+                        "[PARSER] GSV sequence complete: {} satellites",
+                        gsv.satellites.len()
+                    );
                     outputs.push(WireMessage::NmeaGsv(gsv));
                 }
             }
@@ -118,7 +140,7 @@ impl PQTMParser {
     /// Returns `Some(GsvData)` only when the final sentence in the sequence
     /// has been received (i.e. `msg_num == total_msgs`), so the caller gets
     /// the complete satellite set in one shot.
-    fn parse_gsv(&mut self, sentence: &str) -> Option<GsvData> {
+    fn parse_gsv(&mut self, sentence: &str, constellation: GsvConstellation) -> Option<GsvData> {
         // Strip checksum.
         let sentence = match sentence.find('*') {
             Some(idx) => &sentence[..idx],
@@ -136,7 +158,7 @@ impl PQTMParser {
 
         // Reset accumulator on the first message of a new sequence.
         if msg_num == 1 {
-            self.gsv_accumulator = Some(GsvAccumulator::new(total_msgs));
+            self.gsv_accumulator = Some(GsvAccumulator::new(total_msgs, constellation));
         }
 
         // Extract satellite blocks from the remaining fields.
@@ -166,6 +188,7 @@ impl PQTMParser {
             let finished = self.gsv_accumulator.take()?;
             Some(GsvData {
                 satellites: finished.satellites,
+                constellation: finished.constellation,
             })
         } else {
             None

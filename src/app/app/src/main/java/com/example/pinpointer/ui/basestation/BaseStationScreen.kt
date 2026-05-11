@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.SyncAlt
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -37,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.pinpointer.data.model.ConstellationSnrJson
 import com.example.pinpointer.data.model.GpsFixJson
 import com.example.pinpointer.data.model.StatusJson
 import com.example.pinpointer.ui.theme.DataTextStyle
@@ -73,7 +75,7 @@ fun BaseStationScreen(viewModel: TrackingViewModel) {
                 )
             }
 
-            item { GpsStatusCard(status?.gpsFix, status?.gpsSNR ?: 0) }
+            item { GpsStatusCard(status?.gpsFix, status?.gpsSNR ?: ConstellationSnrJson()) }
             item { SurveyInCard(status) }
             item { DownlinkCard(status) }
             item { SystemCard(status) }
@@ -149,7 +151,7 @@ private fun StatusDot(color: Color) {
 }
 
 @Composable
-private fun GpsStatusCard(gpsFix: GpsFixJson?, gpsSNR: Int) {
+private fun GpsStatusCard(gpsFix: GpsFixJson?, gpsSNR: ConstellationSnrJson) {
     val fixColor = when {
         gpsFix == null -> MaterialTheme.colorScheme.error
         gpsFix.fixQuality.contains("Rtk", ignoreCase = true) -> MaterialTheme.colorScheme.primary
@@ -162,25 +164,27 @@ private fun GpsStatusCard(gpsFix: GpsFixJson?, gpsSNR: Int) {
         icon = if (gpsFix != null) Icons.Rounded.GpsFixed else Icons.Rounded.GpsNotFixed,
         iconTint = fixColor
     ) {
+        // ── Fix info ──────────────────────────────────────────────────────────
         if (gpsFix == null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusDot(MaterialTheme.colorScheme.error)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    "No GPS Fix",
-                    style = MaterialTheme.typography.bodyMedium,
+                    "No GPS Fix", style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error
                 )
             }
         } else {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 10.dp)
+            ) {
                 StatusDot(fixColor)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = gpsFix.fixQuality,
                     style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = fixColor
+                    fontWeight = FontWeight.SemiBold, color = fixColor
                 )
             }
             MetricRow("Latitude", "%.6f°".format(gpsFix.latitude))
@@ -188,38 +192,95 @@ private fun GpsStatusCard(gpsFix: GpsFixJson?, gpsSNR: Int) {
             MetricRow("Altitude", "%.1f m".format(gpsFix.altitudeM))
             MetricRow("Satellites", "${gpsFix.satellitesUsed}")
             MetricRow("HDOP", "%.2f".format(gpsFix.hdop))
+        }
 
-            // GPS SNR inline
-            Spacer(modifier = Modifier.height(4.dp))
-            val snrQuality = when {
-                gpsSNR >= 35 -> Triple("Excellent", MaterialTheme.colorScheme.primary, "$gpsSNR dB-Hz")
-                gpsSNR >= 25 -> Triple("Good", MaterialTheme.colorScheme.secondary, "$gpsSNR dB-Hz")
-                gpsSNR > 0 -> Triple("Poor", MaterialTheme.colorScheme.error, "$gpsSNR dB-Hz")
-                else -> Triple("No data", MaterialTheme.colorScheme.outline, "—")
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "GPS SNR", style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        snrQuality.third, style = DataTextStyleSmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        snrQuality.first, style = MaterialTheme.typography.labelSmall,
-                        color = snrQuality.second, fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
+        // ── Constellation SNR breakdown ───────────────────────────────────────
+        Spacer(modifier = Modifier.height(12.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(modifier = Modifier.height(10.dp))
+
+        val avgColor = when {
+            gpsSNR.average >= 35 -> MaterialTheme.colorScheme.primary
+            gpsSNR.average >= 25 -> MaterialTheme.colorScheme.secondary
+            gpsSNR.average > 0 -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.outline
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "GPS Signal Quality", style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                if (gpsSNR.hasData) "Avg ${gpsSNR.average} dB-Hz" else "No data",
+                style = MaterialTheme.typography.labelMedium,
+                color = avgColor, fontWeight = FontWeight.SemiBold
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (!gpsSNR.hasData) {
+            Text(
+                "Awaiting GSV sentences from GPS module…",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            ConstellationSnrRow("GPS", gpsSNR.gps)
+            ConstellationSnrRow("GLONASS", gpsSNR.glonass)
+            ConstellationSnrRow("Galileo", gpsSNR.galileo)
+            ConstellationSnrRow("BeiDou", gpsSNR.beidou)
+            if (gpsSNR.qzss > 0)
+                ConstellationSnrRow("QZSS", gpsSNR.qzss)
+        }
+    }
+}
+
+@Composable
+private fun ConstellationSnrRow(name: String, snr: Int) {
+    if (snr == 0) return
+    val color = when {
+        snr >= 35 -> MaterialTheme.colorScheme.primary
+        snr >= 25 -> MaterialTheme.colorScheme.secondary
+        else -> MaterialTheme.colorScheme.error
+    }
+    val quality = when {
+        snr >= 35 -> "Excellent"
+        snr >= 30 -> "Good"
+        snr >= 25 -> "Fair"
+        else -> "Poor"
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            StatusDot(color)
+            Text(
+                name, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                quality, style = MaterialTheme.typography.labelSmall,
+                color = color
+            )
+            Text(
+                "$snr dB-Hz", style = DataTextStyleSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
@@ -230,6 +291,7 @@ private fun SurveyInCard(status: StatusJson?) {
         status == null -> Pair("Unknown", MaterialTheme.colorScheme.outline)
         status.svinComplete -> Pair("Complete", MaterialTheme.colorScheme.primary)
         status.svinActive -> Pair("In Progress", MaterialTheme.colorScheme.tertiary)
+        status.gpsFix != null -> Pair("Active (awaiting status msg)", MaterialTheme.colorScheme.secondary)
         else -> Pair("Not Started", MaterialTheme.colorScheme.outline)
     }
 
@@ -250,8 +312,12 @@ private fun SurveyInCard(status: StatusJson?) {
                 color = animatedColor
             )
         }
+        if (status != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            MetricRow("Min Duration", "${status.svinDurationS} s")
+        }
         if (status?.svinComplete == true) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Rounded.CheckCircle,

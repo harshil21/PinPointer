@@ -31,8 +31,9 @@ data class StatusJson(
     @SerializedName("gps_fix") val gpsFix: GpsFixJson?,
     @SerializedName("telemetry_count") val telemetryCount: Int,
     @SerializedName("last_downlink_rssi") val lastDownlinkRssi: Int?,
-    /** Average GPS SNR at the base station in dB-Hz. */
-    @SerializedName("gps_snr") val gpsSNR: Int = 0
+    /** Per-constellation SNR at the base station. */
+    @SerializedName("gps_snr") val gpsSNR: ConstellationSnrJson = ConstellationSnrJson(),
+    @SerializedName("svin_duration_s") val svinDurationS: Int = 120
 )
 
 data class GpsFixJson(
@@ -44,7 +45,37 @@ data class GpsFixJson(
     @SerializedName("hdop") val hdop: Float
 )
 
+/**
+ * Per-constellation GPS SNR snapshot from the base station.
+ * Each field is the average SNR (dB-Hz) for that constellation's tracked
+ * satellites; 0 means no data received yet.
+ */
+data class ConstellationSnrJson(
+    @SerializedName("gps") val gps: Int = 0,  // GP – GPS / NAVSTAR
+    @SerializedName("glonass") val glonass: Int = 0,  // GL – GLONASS
+    @SerializedName("galileo") val galileo: Int = 0,  // GA – Galileo
+    @SerializedName("beidou") val beidou: Int = 0,  // GB – BeiDou
+    @SerializedName("qzss") val qzss: Int = 0,  // GQ – QZSS
+    /** Average of GPS + GLONASS + Galileo + BeiDou, non-zero only (server-computed). */
+    @SerializedName("average") val average: Int = 0
+) {
+    val hasData: Boolean get() = average > 0
+
+    /** Non-zero constellation entries as a display map. */
+    fun activeConstellations(): Map<String, Int> = buildMap {
+        if (gps > 0) put("GPS", gps)
+        if (glonass > 0) put("GLONASS", glonass)
+        if (galileo > 0) put("Galileo", galileo)
+        if (beidou > 0) put("BeiDou", beidou)
+        if (qzss > 0) put("QZSS", qzss)
+    }
+}
+
 data class CommandResponse(
     @SerializedName("status") val status: String,
     @SerializedName("command") val command: String
+)
+
+data class SvinConfigBody(
+    @SerializedName("duration_s") val durationS: Int
 )

@@ -122,6 +122,49 @@ impl GgaData {
 
 // ── GSV (Satellites in View) ──────────────────────────────────────────────────
 
+/// Which GNSS constellation a GSV sentence belongs to, derived from its
+/// two-character talker ID (e.g. `$GP` → GPS, `$GL` → GLONASS).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GsvConstellation {
+    Gps,                // GP – GPS / NAVSTAR
+    Glonass,            // GL – GLONASS
+    Galileo,            // GA – Galileo
+    BeiDou,             // GB – BeiDou
+    Qzss,               // GQ – QZSS
+    NavIc,              // GI – NavIC / IRNSS
+    MultiConstellation, // GN – combined talker
+    #[default]
+    Unknown,
+}
+
+impl GsvConstellation {
+    pub fn from_talker(talker: &str) -> Self {
+        match talker {
+            "GP" => GsvConstellation::Gps,
+            "GL" => GsvConstellation::Glonass,
+            "GA" => GsvConstellation::Galileo,
+            "GB" => GsvConstellation::BeiDou,
+            "GQ" => GsvConstellation::Qzss,
+            "GI" => GsvConstellation::NavIc,
+            "GN" => GsvConstellation::MultiConstellation,
+            _ => GsvConstellation::Unknown,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            GsvConstellation::Gps => "GPS",
+            GsvConstellation::Glonass => "GLONASS",
+            GsvConstellation::Galileo => "Galileo",
+            GsvConstellation::BeiDou => "BeiDou",
+            GsvConstellation::Qzss => "QZSS",
+            GsvConstellation::NavIc => "NavIC",
+            GsvConstellation::MultiConstellation => "Multi",
+            GsvConstellation::Unknown => "Unknown",
+        }
+    }
+}
+
 /// A single satellite entry extracted from an NMEA GSV sentence.
 #[derive(Debug, Clone)]
 pub struct GsvSatellite {
@@ -139,9 +182,10 @@ pub struct GsvSatellite {
 /// has been received, so `satellites` contains the full set.
 #[derive(Debug, Clone)]
 pub struct GsvData {
-    /// All satellites reported in this sequence (from all constellations that
-    /// emitted a GSV sentence at this epoch).
+    /// All satellites reported in this sequence.
     pub satellites: Vec<GsvSatellite>,
+    /// Which constellation this sequence belongs to.
+    pub constellation: GsvConstellation,
 }
 
 impl GsvData {

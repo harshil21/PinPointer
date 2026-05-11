@@ -18,8 +18,11 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use rtk::WireMessage;
 use rtk::port::BaseGPS;
-use rtk::protocol::commands::{PQTMCfgMsgRate, PQTMCfgSvin, PQTMMsgName};
-use rtk::protocol::pair::{PairRTCMSetOutputAntPnt, PairRTCMSetOutputMode, RtcmAntPnt, RtcmMode};
+use rtk::protocol::commands::{PQTMCfgMsgRate, PQTMCfgRcvrMode, PQTMCfgSvin, PQTMMsgName};
+use rtk::protocol::pair::{
+    NmeaOutputRateTypes, PairCommonSetNmeaOutputRate, PairRTCMSetOutputAntPnt,
+    PairRTCMSetOutputMode, RtcmAntPnt, RtcmMode,
+};
 use rtk::protocol::response::PQTMResponse;
 
 use crate::state::AppState;
@@ -27,21 +30,16 @@ use crate::state::AppState;
 // ── Survey-in parameters ──────────────────────────────────────────────────────
 
 /// Survey-in mode byte sent to the LC29H.
-/// 0 = disabled, 1 = survey-in, 2 = fixed position.
 const SVIN_MODE: u8 = 1;
-
-/// Minimum observation time the module must accumulate before concluding
-/// the survey-in (seconds).  1 minute as requested.
-const SVIN_MIN_DURATION_S: u32 = 60;
-
-/// Maximum allowed mean 3D position error for the survey-in to be accepted
-/// (metres).
+/// Maximum allowed 3-D position error for the survey-in (metres).
 const SVIN_ACC_LIMIT_M: f32 = 15.0;
+/// Default survey-in duration — overridden at runtime by `AppState::svin_min_duration_s`.
+const SVIN_DEFAULT_DURATION_S: u32 = 120;
 
 // ── Timing constants ──────────────────────────────────────────────────────────
 
 /// Timeout for individual UART command / response round-trips.
-const CMD_TIMEOUT: Duration = Duration::from_secs(10);
+const CMD_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Sleep between iterations of the GPS polling loop.
 /// Short enough to keep the RTCM latency low without burning the CPU.
@@ -75,7 +73,7 @@ pub fn setup_and_open(port_path: PathBuf) -> Result<BaseGPS> {
     // Allow the reader thread and UART to stabilise before sending commands.
     std::thread::sleep(STARTUP_SETTLE);
 
-    configure_gps(&mut gps);
+    configure_gps(&mut gps, SVIN_DEFAULT_DURATION_S);
 
     Ok(gps)
 }
@@ -84,17 +82,17 @@ pub fn setup_and_open(port_path: PathBuf) -> Result<BaseGPS> {
 ///
 /// Each step is non-fatal: a warning is logged on failure so that a partially
 /// configured or pre-configured module still works.
-fn configure_gps(gps: &mut BaseGPS) {
+fn configure_gps(gps: &mut BaseGPS, svin_duration_s: u32) {
     // ── 1. Survey-In ─────────────────────────────────────────────────────────
     log::info!(
         "Configuring survey-in: mode={} min_dur={}s acc_limit={:.1}m",
         SVIN_MODE,
-        SVIN_MIN_DURATION_S,
+        svin_duration_s,
         SVIN_ACC_LIMIT_M,
     );
     let svin_cfg = PQTMCfgSvin {
         mode: SVIN_MODE,
-        min_dur: SVIN_MIN_DURATION_S,
+        min_dur: svin_duration_s,
         acc_limit_m: SVIN_ACC_LIMIT_M,
         // ECEF coordinates are unused in survey-in mode (module determines
         // its own position).
@@ -115,28 +113,28 @@ fn configure_gps(gps: &mut BaseGPS) {
     }
 
     // ── 3. RTCM3 MSM7 Output (PAIR432) ───────────────────────────────────────
-    log::info!("Enabling RTCM3 MSM7 output (PAIR432)...");
+    log::info!("Enabling RTCM3 MSM4 output (PAIR432)...");
     match gps.pair_set_rtcm_mode(
         PairRTCMSetOutputMode {
-            mode: RtcmMode::Rtcm3Msm7,
+            mode: RtcmMode::Rtcm3Msm4,
         },
         CMD_TIMEOUT,
     ) {
-        Ok(_) => log::info!("RTCM3 MSM7 output enabled"),
+        Ok(_) => log::info!("RTCM3 MSM4 output enabled"),
         Err(e) => log::warn!("RTCM mode set error (non-fatal): {:?}", e),
     }
 
     // ── 4. Antenna Reference Point — RTCM 1005 (PAIR434) ─────────────────────
-    log::info!("Enabling antenna reference-point output (PAIR434)...");
-    match gps.pair_set_rtcm_antpnt(
-        PairRTCMSetOutputAntPnt {
-            ant_pnt: RtcmAntPnt::Enable,
-        },
-        CMD_TIMEOUT,
-    ) {
-        Ok(_) => log::info!("Antenna reference-point output enabled"),
-        Err(e) => log::warn!("Antenna reference-point set error (non-fatal): {:?}", e),
-    }
+    // log::info!("Enabling antenna reference-point output (PAIR434)...");
+    // match gps.pair_set_rtcm_antpnt(
+    //     PairRTCMSetOutputAntPnt {
+    //         ant_pnt: RtcmAntPnt::Enable,
+    //     },
+    //     CMD_TIMEOUT,
+    // ) {
+    //     Ok(_) => log::info!("Antenna reference-point output enabled"),
+    //     Err(e) => log::warn!("Antenna reference-point set error (non-fatal): {:?}", e),
+    // }
 
     // ── 5. Enable $PQTMSVINSTATUS Messages ───────────────────────────────────
     // Rate=1 means one message per second, msg_ver=1 as per LC29H datasheet.
@@ -151,6 +149,53 @@ fn configure_gps(gps: &mut BaseGPS) {
     ) {
         Ok(_) => log::info!("$PQTMSVINSTATUS messages enabled"),
         Err(e) => log::warn!("SVIN status message-rate error (non-fatal): {:?}", e),
+    }
+
+    // Set base station mode
+    // match gps.cfg_rcvrmode_write(PQTMCfgRcvrMode {mode: 2}, CMD_TIMEOUT) {
+    //     Ok(_) => log::info!("$PQTMCFGRVCRMODE set"),
+    //     Err(e) => log::warn!("Failed to set rcvr mode {:?}", e)
+    // }
+
+    // You need to uncomment this for it to truly save it and then power cycle the module
+    // match gps.pair_nvram_save_setting(CMD_TIMEOUT) {
+    //     Ok(_) => log::info!("Saved to NVM!"),
+    //     Err(e) => log::warn!("Failed to save to nvm {:?}", e)
+    // }
+
+    for sentence_type in [
+        PQTMMsgName::RMC,
+        PQTMMsgName::GGA,
+        PQTMMsgName::GSV,
+        PQTMMsgName::GSA,
+        PQTMMsgName::VTG,
+    ] {
+        match gps.cfg_msgrate_write(
+            PQTMCfgMsgRate {
+                msg_name: sentence_type.clone(),
+                rate: 1,
+                msg_ver: 1,
+            },
+            CMD_TIMEOUT,
+        ) {
+            Ok(_) => log::info!("${:?} messages enabled", sentence_type),
+            Err(e) => log::warn!(
+                "{:?} message-rate error (non-fatal): {:?}",
+                sentence_type,
+                e
+            ),
+        }
+    }
+
+    log::info!("Saving parameters to flash ($PQTMSAVEPAR)...");
+    match gps.save_par(CMD_TIMEOUT) {
+        Ok(_) => log::info!("Parameters saved to flash OK"),
+        Err(e) => log::warn!("Save-parameters error (non-fatal): {:?}", e),
+    }
+
+    match gps.pair_nvram_save_setting(CMD_TIMEOUT) {
+        Ok(_) => log::info!("Saved to NVM!"),
+        Err(e) => log::warn!("Failed to save to nvm {:?}", e),
     }
 }
 
@@ -170,6 +215,14 @@ pub fn run_gps_thread(
     state: Arc<Mutex<AppState>>,
 ) {
     log::info!("GPS polling thread started");
+
+    // Optimistically mark survey-in as active so the UI shows a meaningful
+    // state before the first $PQTMSVINSTATUS message arrives.
+    if let Ok(mut s) = state.lock() {
+        if !s.svin_complete {
+            s.svin_active = true;
+        }
+    }
 
     loop {
         // ── Resurvey check ────────────────────────────────────────────────────
@@ -191,8 +244,13 @@ pub fn run_gps_thread(
 
         if do_resurvey {
             log::info!("Resurvey requested — restarting GPS survey-in...");
-            configure_gps(&mut gps);
-            log::info!("Resurvey configuration sent to GPS module");
+            let duration_s = state.lock().map(|s| s.svin_min_duration_s).unwrap_or(120);
+            // TODO: Fix this: We should ideally restart the gnss engine (PQTMGNSSSTOP & PQTMGNSSSTART)
+            // configure_gps(&mut gps, duration_s);
+            log::info!(
+                "Resurvey configuration sent to GPS module ({}s)",
+                duration_s
+            );
         }
 
         // ── RTCM correction frames ────────────────────────────────────────────
@@ -248,14 +306,17 @@ fn handle_wire_message(wire: WireMessage, state: &Arc<Mutex<AppState>>) {
             );
 
             if let Ok(mut s) = state.lock() {
+                // Always record live metrics for display.
+                s.svin_accuracy_m = status.mean_acc;
+                s.svin_observations = status.observations;
+                s.svin_elapsed_s = status.config_duration;
+
                 match status.valid {
                     1 => {
-                        // In progress.
                         s.svin_active = true;
                         s.svin_complete = false;
                     }
                     2 => {
-                        // Converged.
                         if !s.svin_complete {
                             log::info!(
                                 "Survey-in COMPLETE — ECEF ({:.3}, {:.3}, {:.3}) \
@@ -264,14 +325,13 @@ fn handle_wire_message(wire: WireMessage, state: &Arc<Mutex<AppState>>) {
                                 status.mean_y,
                                 status.mean_z,
                                 status.mean_acc,
-                                status.config_duration,
+                                status.config_duration
                             );
                         }
                         s.svin_complete = true;
                         s.svin_active = false;
                     }
                     _ => {
-                        // Not started or invalid.
                         s.svin_active = false;
                     }
                 }
@@ -295,13 +355,42 @@ fn handle_wire_message(wire: WireMessage, state: &Arc<Mutex<AppState>>) {
         // Average SNR update from satellite view sentences.
         WireMessage::NmeaGsv(gsv) => {
             let avg = gsv.avg_snr();
-            log::debug!(
-                "GSV: {} satellites, avg SNR = {} dB-Hz",
-                gsv.satellites.len(),
+            let cname = gsv.constellation.as_str();
+            let total = gsv.satellites.len();
+            let with_snr = gsv.satellites.iter().filter(|s| s.snr.is_some()).count();
+
+            log::info!(
+                "GSV: {}/{} {} satellites have SNR, avg = {} dB-Hz",
+                with_snr,
+                total,
+                cname,
                 avg
             );
-            if let Ok(mut s) = state.lock() {
-                s.gps_snr = avg;
+
+            // Only update when there are tracked satellites with valid SNR.
+            // This prevents zero-satellite sequences (e.g. $GQGSV,1,1,00)
+            // from zeroing out a previously valid reading.
+            if avg > 0 {
+                if let Ok(mut s) = state.lock() {
+                    use rtk::GsvConstellation::*;
+                    match gsv.constellation {
+                        Gps => s.gps_snr.gps = avg,
+                        Glonass => s.gps_snr.glonass = avg,
+                        Galileo => s.gps_snr.galileo = avg,
+                        BeiDou => s.gps_snr.beidou = avg,
+                        Qzss => s.gps_snr.qzss = avg,
+                        NavIc => s.gps_snr.navic = avg,
+                        _ => {} // GN and Unknown: skip
+                    }
+                    log::debug!(
+                        "AppState::gps_snr {} -> {} dB-Hz  (avg_active={})",
+                        cname,
+                        avg,
+                        s.gps_snr.average_active()
+                    );
+                }
+            } else {
+                log::debug!("GSV: {} has no tracked satellites — skipping update", cname);
             }
         }
 

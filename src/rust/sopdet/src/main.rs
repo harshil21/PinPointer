@@ -218,7 +218,14 @@ fn log_status_summary(state: &Arc<Mutex<AppState>>) {
             );
         }
 
-        log::info!("Base GPS SNR — avg={}dBHz", s.gps_snr);
+        log::info!(
+            "Base GPS SNR — avg_active={}dBHz  GPS={}  GL={}  GA={}  GB={}",
+            s.gps_snr.average_active(),
+            s.gps_snr.gps,
+            s.gps_snr.glonass,
+            s.gps_snr.galileo,
+            s.gps_snr.beidou
+        );
 
         if let Some(telem) = s.telemetry.last() {
             log::info!(

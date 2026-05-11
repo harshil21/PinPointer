@@ -63,14 +63,14 @@ impl FlightState {
     pub fn as_u8(self) -> u8 {
         self as u8
     }
-    
+
     pub const fn abbrev(self) -> char {
         match self {
-            FlightState::Standby   => 'S',
+            FlightState::Standby => 'S',
             FlightState::MotorBurn => 'M',
-            FlightState::Coast     => 'C',
-            FlightState::Freefall  => 'F',
-            FlightState::Landed    => 'L',
+            FlightState::Coast => 'C',
+            FlightState::Freefall => 'F',
+            FlightState::Landed => 'L',
         }
     }
 }
@@ -78,11 +78,11 @@ impl FlightState {
 impl std::fmt::Display for FlightState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FlightState::Standby   => write!(f, "Standby"),
+            FlightState::Standby => write!(f, "Standby"),
             FlightState::MotorBurn => write!(f, "MotorBurn"),
-            FlightState::Coast     => write!(f, "Coast"),
-            FlightState::Freefall  => write!(f, "Freefall"),
-            FlightState::Landed    => write!(f, "Landed"),
+            FlightState::Coast => write!(f, "Coast"),
+            FlightState::Freefall => write!(f, "Freefall"),
+            FlightState::Landed => write!(f, "Landed"),
         }
     }
 }
@@ -136,8 +136,8 @@ impl StateChecker {
     ///
     /// Returns `true` if the state changed as a result of this call.
     pub fn update(&mut self, data: &ProcessedFIRMData) -> bool {
-        let alt     = data.est_position_z_meters;
-        let vel     = data.est_velocity_z_meters_per_s;
+        let alt = data.est_position_z_meters;
+        let vel = data.est_velocity_z_meters_per_s;
         // raw_rotated_acceleration_z_gs is in g-units (includes reaction to gravity).
         let accel_z = data.raw_rotated_acceleration_z_gs;
 
@@ -153,7 +153,9 @@ impl StateChecker {
                     self.max_velocity_mps = vel.max(0.0);
                     log::info!(
                         "STATE → MotorBurn  alt={:.1} m  accel_z={:.2} g  vel={:.1} m/s",
-                        alt, accel_z, vel
+                        alt,
+                        accel_z,
+                        vel
                     );
                 }
             }
@@ -177,7 +179,9 @@ impl StateChecker {
                     self.state = FlightState::Coast;
                     log::info!(
                         "STATE → Coast  vel={:.1} m/s  peak_vel={:.1} m/s  alt={:.1} m",
-                        vel, self.max_velocity_mps, alt
+                        vel,
+                        self.max_velocity_mps,
+                        alt
                     );
                 }
             }
@@ -194,7 +198,9 @@ impl StateChecker {
                     self.state = FlightState::Freefall;
                     log::info!(
                         "STATE → Freefall  vel={:.1} m/s  alt={:.1} m  apogee={:.1} m",
-                        vel, alt, self.max_alt_m
+                        vel,
+                        alt,
+                        self.max_alt_m
                     );
                 }
             }
@@ -207,7 +213,9 @@ impl StateChecker {
                     self.state = FlightState::Landed;
                     log::info!(
                         "STATE → Landed  |accel_z|={:.2} g  alt={:.1} m  apogee={:.1} m",
-                        accel_z.abs(), alt, self.max_alt_m
+                        accel_z.abs(),
+                        alt,
+                        self.max_alt_m
                     );
                 }
             }

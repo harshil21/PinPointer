@@ -262,7 +262,21 @@ fn main() -> anyhow::Result<()> {
                         had_new_data = true;
                     }
                     WireMessage::NmeaGsv(gsv) => {
+                        // Always update the overall average.
                         flight_data.gps_snr = gsv.avg_snr();
+                        // Update per-constellation field when SNR is non-zero.
+                        let avg = gsv.avg_snr();
+                        if avg > 0 {
+                            use rtk::GsvConstellation::*;
+                            match gsv.constellation {
+                                Gps => flight_data.gps_snr_gps = avg,
+                                Glonass => flight_data.gps_snr_glonass = avg,
+                                Galileo => flight_data.gps_snr_galileo = avg,
+                                BeiDou => flight_data.gps_snr_beidou = avg,
+                                Qzss => flight_data.gps_snr_qzss = avg,
+                                _ => {}
+                            }
+                        }
                         had_new_data = true;
                     }
                     _ => {}

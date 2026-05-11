@@ -56,4 +56,7 @@ class TelemetryRepository(private val api: SopdetApi) {
     suspend fun stopEmergencyLocate() = api.stopEmergencyLocate()
     suspend fun sendDeployEjection() = api.sendDeployEjection()
     suspend fun requestResurvey() = api.requestResurvey()
+    suspend fun setSvinDuration(seconds: Int) = api.setSvinDuration(
+        com.example.pinpointer.data.model.SvinConfigBody(seconds)
+    )
 }

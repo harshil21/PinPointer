@@ -1,3 +1,4 @@
+use crate::protocol::commands::PQTMCfgRcvrMode;
 use crate::protocol::nmea::{GgaData, GsvData};
 use crate::protocol::pair::PairResponse;
 
@@ -33,6 +34,10 @@ pub enum PQTMResponse {
 
     Epe(PQTMEpe),
     SvinStatus(PQTMSvinStatus),
+
+    CfgRcvrModeWriteOk,
+    CfgRcvrModeReadOk(PQTMCfgRcvrMode),
+    CfgRcvrError(PQTMModuleError),
 }
 
 /// Represents errors returned by the GPS module.
@@ -67,7 +72,7 @@ pub enum ResponseError {
 #[derive(Debug, Clone)]
 pub struct PQTMSvinStatus {
     _msg_ver: String,
-    pub time_of_week: u64, // ms
+    pub time_of_week: f32, // ms
     pub valid: u8,         // 0 - invalid, 1 - in-progress, 2 - valid
     _reserved1: String,
     _reserved2: String,
@@ -190,7 +195,7 @@ impl PQTMSvinStatus {
         let time_of_week_str = it
             .next()
             .ok_or(ParseError::ParsingError("time_of_week not found"))?;
-        let time_of_week: u64 = time_of_week_str
+        let time_of_week: f32 = time_of_week_str
             .parse()
             .map_err(|_| ParseError::ParsingError("invalid time_of_week"))?;
 

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.Brightness7
@@ -20,6 +21,8 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -27,16 +30,23 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
-    onSettingsChange: (AppSettings) -> Unit
+    onSettingsChange: (AppSettings) -> Unit,
+    onSvinApply: (Int) -> Unit = {}
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -106,7 +116,7 @@ fun SettingsScreen(
                 }
             }
 
-            // ── Tracking ─────────────────────────────────────────────────────────
+            // ── Tracking ──────────────────────────────────────────────────
             item {
                 SettingsSectionCard(title = "Tracking") {
                     SwitchSettingRow(
@@ -119,11 +129,70 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            // ── Survey-In ──────────────────────────────────────────────────
+            item {
+                SvinDurationCard(
+                    current = settings.svinDurationSeconds,
+                    onApply = { newDuration ->
+                        onSettingsChange(settings.copy(svinDurationSeconds = newDuration))
+                        onSvinApply(newDuration)
+                    }
+                )
+            }
         }
     }
 }
 
-// ── Internal helpers ──────────────────────────────────────────────────────────
+@Composable
+private fun SvinDurationCard(current: Int, onApply: (Int) -> Unit) {
+    var text by remember(current) { mutableStateOf(current.toString()) }
+    val parsed = text.toIntOrNull()
+    val valid = parsed != null && parsed in 10..600
+
+    SettingsSectionCard(title = "RTK Survey-In") {
+        Text(
+            "Minimum duration the base station must observe satellites before " +
+                    "the survey-in converges.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.filter { c -> c.isDigit() }.take(3) },
+                label = { Text("Duration (s)") },
+                isError = !valid && text.isNotEmpty(),
+                supportingText = {
+                    if (!valid && text.isNotEmpty())
+                        Text("Enter time (s)", color = MaterialTheme.colorScheme.error)
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                shape = MaterialTheme.shapes.large,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                )
+            )
+            androidx.compose.material3.FilledTonalButton(
+                onClick = { if (valid) onApply(parsed!!) },
+                enabled = valid,
+                shape = MaterialTheme.shapes.large
+            ) { Text("Apply") }
+        }
+    }
+}
+
+// ── Internal helpers ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun SettingsSectionCard(

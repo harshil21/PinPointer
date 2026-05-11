@@ -46,6 +46,6 @@ pub mod registers;
 
 // Re-export the most commonly used types at crate root.
 pub use config::*;
-pub use error::{Rfm95Error, Result};
+pub use error::{Result, Rfm95Error};
 pub use radio::{PinConfig, ReceivedPacket, Rfm95};
 pub use registers::IrqFlags;

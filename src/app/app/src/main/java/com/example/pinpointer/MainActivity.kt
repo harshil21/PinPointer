@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.runtime.rememberCoroutineScope
 import com.example.pinpointer.data.remote.SopdetApi
 import com.example.pinpointer.data.repository.TelemetryRepository
 import com.example.pinpointer.ui.basestation.BaseStationScreen
@@ -42,6 +43,7 @@ import com.example.pinpointer.ui.theme.PinPointerTheme
 import com.example.pinpointer.ui.tracking.TrackingScreen
 import com.example.pinpointer.ui.tracking.TrackingViewModel
 import com.example.pinpointer.util.OrientationTracker
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -120,6 +122,8 @@ fun AppNavigation(
 
     var selectedTab by remember { mutableIntStateOf(0) }
 
+    val scope = rememberCoroutineScope()
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -153,7 +157,15 @@ fun AppNavigation(
                 3 -> BaseStationScreen(viewModel)
                 4 -> SettingsScreen(
                     settings = settings,
-                    onSettingsChange = onSettingsChange
+                    onSettingsChange = onSettingsChange,
+                    onSvinApply = { duration ->
+                        scope.launch {
+                            try {
+                                viewModel.repository.setSvinDuration(duration)
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
                 )
             }
         }

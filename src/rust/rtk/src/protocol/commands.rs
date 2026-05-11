@@ -14,6 +14,9 @@ pub enum PQTMCommand {
 
     CfgMsgRateWrite(PQTMCfgMsgRate),
     CfgMsgRateRead(PQTMCfgMsgRateGet),
+
+    CfgRcvrModeWrite(PQTMCfgRcvrMode),
+    CfgRcvrModeRead,
 }
 
 #[derive(Debug, Clone)]
@@ -37,12 +40,27 @@ pub struct PQTMCfgMsgRate {
 pub enum PQTMMsgName {
     Epe,
     SvinStatus,
+    RMC,
+    GGA,
+    GSV,
+    GSA,
+    VTG,
+    GLL,
+    ZDA,
+    GRS,
+    GST,
+    GNS,
 }
 
 #[derive(Debug, Clone)]
 pub struct PQTMCfgMsgRateGet {
     pub msg_name: String,
     pub msg_ver: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PQTMCfgRcvrMode {
+    pub mode: u8,
 }
 
 impl PQTMCfgMsgRateGet {
@@ -53,12 +71,23 @@ impl PQTMCfgMsgRateGet {
 
 impl PQTMCfgMsgRate {
     pub fn to_fields(&self) -> String {
-        format!(
-            "PQTMCFGMSGRATE,W,{},{},{}",
-            self.msg_name.clone().as_str(),
-            self.rate,
-            self.msg_ver,
-        )
+        // Standard NMEA msg types should not have msg_ver:
+        let msg_ver_needed = matches!(self.msg_name, PQTMMsgName::Epe | PQTMMsgName::SvinStatus);
+        
+        if msg_ver_needed {
+            format!(
+                "PQTMCFGMSGRATE,W,{},{},{}",
+                self.msg_name.clone().as_str(),
+                self.rate,
+                self.msg_ver,
+            )
+        } else {
+            format!(
+                "PQTMCFGMSGRATE,W,{},{}",
+                self.msg_name.clone().as_str(),
+                self.rate,
+            )
+        }
     }
 
     pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError>
@@ -163,6 +192,16 @@ impl PQTMMsgName {
         match self {
             PQTMMsgName::SvinStatus => "PQTMSVINSTATUS",
             PQTMMsgName::Epe => "PQTMEPE",
+            PQTMMsgName::RMC => "RMC",
+            PQTMMsgName::GGA => "GGA",
+            PQTMMsgName::GSV => "GSV",
+            PQTMMsgName::GSA => "GSA",
+            PQTMMsgName::VTG => "VTG",
+            PQTMMsgName::GLL => "GLL",
+            PQTMMsgName::ZDA => "ZDA",
+            PQTMMsgName::GRS => "GRS",
+            PQTMMsgName::GST => "GST",
+            PQTMMsgName::GNS => "GNS",
         }
     }
 
@@ -170,7 +209,37 @@ impl PQTMMsgName {
         match s {
             "PQTMSVINSTATUS" => Some(PQTMMsgName::SvinStatus),
             "PQTMEPE" => Some(PQTMMsgName::Epe),
+            "RMC" => Some(PQTMMsgName::RMC),
+            "GGA" => Some(PQTMMsgName::GGA),
+            "GSV" => Some(PQTMMsgName::GSV),
+            "GSA" => Some(PQTMMsgName::GSA),
+            "VTG" => Some(PQTMMsgName::VTG),
+            "GLL" => Some(PQTMMsgName::GLL),
+            "ZDA" => Some(PQTMMsgName::ZDA),
+            "GRS" => Some(PQTMMsgName::GRS),
+            "GST" => Some(PQTMMsgName::GST),
+            "GNS" => Some(PQTMMsgName::GNS),
             _ => None,
         }
+    }
+}
+
+impl PQTMCfgRcvrMode {
+    pub fn to_fields(&self) -> String {
+        format!("PQTMCFGRCVRMODE,W,{}", self.mode)
+    }
+
+    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError>
+    where
+        I: Iterator<Item = &'a str>,
+    {
+        let mode_str = it
+            .next()
+            .ok_or(ParseError::ParsingError("mode not found"))?;
+        let mode: u8 = mode_str
+            .parse()
+            .map_err(|_| ParseError::ParsingError("invalid mode"))?;
+
+        Ok(PQTMCfgRcvrMode { mode })
     }
 }

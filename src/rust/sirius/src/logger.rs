@@ -91,6 +91,13 @@ pub struct LogEntry {
     pub satellites_used: u8,
     /// Average GPS SNR from satellites (dB-Hz, 0 if no GSV data yet).
     pub gps_snr: u8,
+    /// Per-constellation SNR (dB-Hz). Zero until the first GSV sentence for
+    /// that constellation is received.
+    pub gps_snr_gps: u8,
+    pub gps_snr_glonass: u8,
+    pub gps_snr_galileo: u8,
+    pub gps_snr_beidou: u8,
+    pub gps_snr_qzss: u8,
 
     // ── Pyro ──────────────────────────────────────────────────────────────────
     pub pyro_deployed: bool,
@@ -153,6 +160,11 @@ pub fn build_log_entry(data: &FlightData, boot: Instant, tx_hex: &str, rx_hex: &
         hdop: data.hdop,
         satellites_used: data.satellites_used,
         gps_snr: data.gps_snr,
+        gps_snr_gps: data.gps_snr_gps,
+        gps_snr_glonass: data.gps_snr_glonass,
+        gps_snr_galileo: data.gps_snr_galileo,
+        gps_snr_beidou: data.gps_snr_beidou,
+        gps_snr_qzss: data.gps_snr_qzss,
 
         pyro_deployed: data.pyro_deployed,
         pyro_continuity: data.pyro_continuity,
