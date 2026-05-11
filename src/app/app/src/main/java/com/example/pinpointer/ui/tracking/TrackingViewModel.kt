@@ -59,6 +59,16 @@ class TrackingViewModel(
         _forceRssiOnly.value = value
     }
 
+    /**
+     * Discard all RSSI samples and reset the direction finder. Used by the
+     * "Recalibrate" button on the Tracking screen — only effective while we
+     * are in RSSI-only tracking; in any other mode the call is a no-op.
+     */
+    fun recalibrateRssiTracking() {
+        rssiDirectionFinder.clear()
+        lastSeenSeq = -1
+    }
+
     init {
         viewModelScope.launch { repository.startPolling() }
         orientationTracker.start()

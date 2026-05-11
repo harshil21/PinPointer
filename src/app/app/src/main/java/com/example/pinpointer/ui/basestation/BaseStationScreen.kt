@@ -18,8 +18,6 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.GpsFixed
 import androidx.compose.material.icons.rounded.GpsNotFixed
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
-import androidx.compose.material.icons.rounded.Rocket
-import androidx.compose.material.icons.rounded.Router
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.SyncAlt
@@ -42,7 +40,6 @@ import androidx.compose.ui.unit.dp
 import com.example.pinpointer.data.model.ConstellationSnrJson
 import com.example.pinpointer.data.model.GpsFixJson
 import com.example.pinpointer.data.model.StatusJson
-import com.example.pinpointer.ui.theme.DataTextStyle
 import com.example.pinpointer.ui.theme.DataTextStyleSmall
 import com.example.pinpointer.ui.tracking.TrackingViewModel
 
@@ -77,7 +74,6 @@ fun BaseStationScreen(viewModel: TrackingViewModel) {
             }
 
             item { GpsStatusCard(status?.gpsFix, status?.gpsSNR ?: ConstellationSnrJson()) }
-            item { RocketDebugSnrCard(status?.rocketDebugSnr) }
             item { SurveyInCard(status) }
             item { DownlinkCard(status) }
             item { SystemCard(status) }
@@ -283,68 +279,6 @@ private fun ConstellationSnrRow(name: String, snr: Int) {
                 "$snr dB-Hz", style = DataTextStyleSmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
-        }
-    }
-}
-
-@Composable
-private fun RocketDebugSnrCard(snr: ConstellationSnrJson?) {
-    val iconTint = when {
-        snr == null -> MaterialTheme.colorScheme.outline
-        snr.average >= 35 -> MaterialTheme.colorScheme.primary
-        snr.average >= 25 -> MaterialTheme.colorScheme.secondary
-        snr.average > 0 -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.outline
-    }
-
-    SectionCard(
-        title = "Rocket GPS SNR (Debug)",
-        icon = Icons.Rounded.Rocket,
-        iconTint = iconTint
-    ) {
-        if (snr == null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                StatusDot(MaterialTheme.colorScheme.outline)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Debug telemetry off — enable in Commands tab",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            return@SectionCard
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Per-constellation SNR", style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                if (snr.hasData) "Avg ${snr.average} dB-Hz" else "No data yet",
-                style = MaterialTheme.typography.labelMedium,
-                color = iconTint, fontWeight = FontWeight.SemiBold
-            )
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (!snr.hasData) {
-            Text(
-                "Awaiting first debug packet from rocket…",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            ConstellationSnrRow("GPS", snr.gps)
-            ConstellationSnrRow("GLONASS", snr.glonass)
-            ConstellationSnrRow("Galileo", snr.galileo)
-            ConstellationSnrRow("BeiDou", snr.beidou)
-            if (snr.qzss > 0)
-                ConstellationSnrRow("QZSS", snr.qzss)
         }
     }
 }

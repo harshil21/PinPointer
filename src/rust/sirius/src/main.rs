@@ -218,8 +218,7 @@ fn main() -> anyhow::Result<()> {
     let mut processor = DataProcessor::new();
     let mut flight_data = FlightData::default();
 
-    // Most-recently observed TX / RX packet bytes (hex-encoded for the CSV).
-    let mut last_tx_hex = String::new();
+    // Most-recently observed RX packet bytes (hex-encoded for the CSV).
     let mut last_rx_hex = String::new();
 
     // Rate-limit the per-constellation SNR info log to once per second.
@@ -329,10 +328,10 @@ fn main() -> anyhow::Result<()> {
         update_buzzer(&flight_data, emergency || contact_lost, &buzzer);
 
         // ── 8. Drain radio log bytes (non-blocking) ────────────────────────────────────
-        if let Ok(tx) = tx_log_rx.try_recv() {
-            last_tx_hex = bytes_to_hex(&tx);
-            had_new_data = true;
-        }
+        // TX bytes are still drained so the channel never backs up, but the
+        // CSV log no longer mirrors them — we already write the same
+        // information from the structured fields on every row.
+        while tx_log_rx.try_recv().is_ok() {}
         if let Ok(rx) = rx_log_rx.try_recv() {
             last_rx_hex = bytes_to_hex(&rx);
             had_new_data = true;
@@ -340,12 +339,7 @@ fn main() -> anyhow::Result<()> {
 
         // ── 9. CSV log — only write when new data arrived ─────────────────────────────
         if had_new_data {
-            logger.log(build_log_entry(
-                &flight_data,
-                boot,
-                &last_tx_hex,
-                &last_rx_hex,
-            ));
+            logger.log(build_log_entry(&flight_data, &last_rx_hex));
         }
 
         // ── 10. Per-constellation SNR info log (once per second when any data) ─

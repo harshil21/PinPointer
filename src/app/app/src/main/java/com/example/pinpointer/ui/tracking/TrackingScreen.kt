@@ -12,10 +12,12 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,12 +28,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FlightTakeoff
 import androidx.compose.material.icons.rounded.GpsFixed
 import androidx.compose.material.icons.rounded.GpsOff
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Satellite
 import androidx.compose.material.icons.rounded.SignalCellularOff
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -39,7 +48,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -137,11 +148,14 @@ private fun ValueTrend.arrow() = when (this) {
 
 // ── Root composable ───────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TrackingScreen(viewModel: TrackingViewModel) {
     val state by viewModel.uiState.collectAsState()
     val t = state.telemetry
+    val snrSummary = remember(t, state.status?.rocketDebugSnr) {
+        rocketSnrSummary(t, state.status?.rocketDebugSnr)
+    }
 
     // GPS altitude relative/absolute toggle
     var gpsAltRelative by remember { mutableStateOf(true) }
@@ -150,6 +164,11 @@ fun TrackingScreen(viewModel: TrackingViewModel) {
         val alt = t?.gpsAltM ?: return@LaunchedEffect
         if (alt != 0f && firstGpsAlt == null) firstGpsAlt = alt
     }
+
+    // Rocket SNR detail sheet
+    var snrSheetOpen by remember { mutableStateOf(false) }
+    val snrSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetScope = rememberCoroutineScope()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -220,11 +239,11 @@ fun TrackingScreen(viewModel: TrackingViewModel) {
                         modifier = Modifier.weight(1f),
                         rtkFix = t?.rtkFix
                     )
-                    // Rocket GPS SNR from the downlink packet
-                    SmallMetricCard(
-                        Modifier.weight(1f), "Rkt SNR",
-                        (t?.gpsSNR ?: 0).toFloat(),
-                        { if (it > 0) "${it.toInt()} dBHz" else "—" }, 1f
+                    // Rocket GPS SNR — tap to see per-constellation breakdown.
+                    RocketSnrCard(
+                        modifier = Modifier.weight(1f),
+                        summary = snrSummary,
+                        onClick = { snrSheetOpen = true }
                     )
                 }
 
@@ -275,7 +294,24 @@ fun TrackingScreen(viewModel: TrackingViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                uiState = state
+                uiState = state,
+                onRecalibrate = { viewModel.recalibrateRssiTracking() }
+            )
+        }
+    }
+
+    if (snrSheetOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { snrSheetOpen = false },
+            sheetState = snrSheetState,
+            contentWindowInsets = { WindowInsets.navigationBars }
+        ) {
+            RocketSnrDetails(
+                summary = snrSummary,
+                onClose = {
+                    sheetScope.launch { snrSheetState.hide() }
+                        .invokeOnCompletion { if (!snrSheetState.isVisible) snrSheetOpen = false }
+                }
             )
         }
     }
@@ -561,7 +597,11 @@ private fun SmallMetricCard(
 // ── Antenna pointing section ──────────────────────────────────────────────────
 
 @Composable
-private fun AntennaPointingSection(modifier: Modifier, uiState: TrackingUiState) {
+private fun AntennaPointingSection(
+    modifier: Modifier,
+    uiState: TrackingUiState,
+    onRecalibrate: () -> Unit
+) {
     val animAz by animateFloatAsState(
         uiState.deviationAzimuth.toFloat(),
         animationSpec = spring(dampingRatio = 0.6f, stiffness = 150f), label = "az"
@@ -709,6 +749,38 @@ private fun AntennaPointingSection(modifier: Modifier, uiState: TrackingUiState)
             )
             DeviationBlock("AZIMUTH", animAz, "RIGHT", "LEFT", valid, onContainer)
         }
+
+        Spacer(Modifier.height(8.dp))
+
+        // ── Recalibrate (only in RSSI tracking mode) ──────────────────────────
+        RecalibrateButton(
+            enabled = inRssiScanMode,
+            onClick = onRecalibrate
+        )
+    }
+}
+
+@Composable
+private fun RecalibrateButton(enabled: Boolean, onClick: () -> Unit) {
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Refresh,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = if (enabled) "Recalibrate — Pan Phone Again"
+            else "Recalibrate (RSSI mode only)",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
@@ -865,4 +937,173 @@ private fun DrawScope.drawReticle(
     // Bullseye
     drawCircle(gridColor.copy(alpha = 0.9f), 5.dp.toPx(), Offset(cx, cy), style = Stroke(1.5.dp.toPx()))
     drawCircle(gridColor.copy(alpha = 0.5f), 1.5.dp.toPx(), Offset(cx, cy))
+}
+
+// ── Rocket SNR tile + detail sheet ───────────────────────────────────────────
+
+@Composable
+private fun RocketSnrCard(
+    modifier: Modifier,
+    summary: RocketSnrSummary,
+    onClick: () -> Unit
+) {
+    val animVal by animateFloatAsState(summary.displayValue.toFloat(), label = "snrCard")
+    val tone = snrTone(summary.displayValue)
+    Box(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clickable(onClickLabel = "Show SNR details") { onClick() }
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Rkt SNR", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Icon(
+                    imageVector = Icons.Rounded.Satellite,
+                    contentDescription = null,
+                    tint = tone,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = if (summary.hasValue) "${animVal.toInt()} dBHz" else "—",
+                style = DataTextStyleSmall,
+                color = if (summary.hasValue) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+private fun snrTone(snr: Int): Color = when {
+    snr >= 35 -> Color(0xFF4CAF50)
+    snr >= 25 -> Color(0xFFFFB300)
+    snr > 0 -> Color(0xFFF44336)
+    else -> Color(0xFF78909C)
+}
+
+@Composable
+private fun RocketSnrDetails(summary: RocketSnrSummary, onClose: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 24.dp, top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Rounded.Satellite,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "Rocket GPS SNR",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        val headline = when {
+            summary.hasValue -> "${summary.displayValue} dB-Hz"
+            else -> "No SNR data yet"
+        }
+        Text(
+            text = headline,
+            style = MaterialTheme.typography.headlineMedium,
+            color = snrTone(summary.displayValue),
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = sourceCaption(summary.source),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+        Text(
+            text = "Per-constellation",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        val per = summary.perConstellation
+        if (per == null) {
+            Text(
+                "Enable Debug Telemetry from the Commands tab to receive per-constellation SNR from the rocket.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else if (!per.hasData
+            && per.gps == 0 && per.glonass == 0
+            && per.galileo == 0 && per.beidou == 0 && per.qzss == 0
+        ) {
+            Text(
+                "Awaiting first debug packet from rocket…",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            SnrDetailRow("GPS", per.gps)
+            SnrDetailRow("GLONASS", per.glonass)
+            SnrDetailRow("Galileo", per.galileo)
+            SnrDetailRow("BeiDou", per.beidou)
+            SnrDetailRow("QZSS", per.qzss)
+        }
+
+        FilledTonalButton(
+            onClick = onClose,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+        ) { Text("Close") }
+    }
+}
+
+@Composable
+private fun SnrDetailRow(name: String, snr: Int) {
+    val tone = snrTone(snr)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            name,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = if (snr > 0) "$snr dB-Hz" else "—",
+            style = DataTextStyleSmall,
+            color = if (snr > 0) tone else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+private fun sourceCaption(source: RocketSnrSummary.Source): String = when (source) {
+    RocketSnrSummary.Source.DEBUG_AVERAGE ->
+        "Average of active constellations (debug telemetry)."
+    RocketSnrSummary.Source.DEBUG_MAX ->
+        "Strongest per-constellation reading (debug telemetry)."
+    RocketSnrSummary.Source.TELEMETRY_AVERAGE ->
+        "Average GPS SNR byte from regular downlink."
+    RocketSnrSummary.Source.NONE ->
+        "Awaiting GSV sentences from rocket GPS module."
 }

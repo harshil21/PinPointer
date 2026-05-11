@@ -13,7 +13,7 @@ use std::fs::{File, OpenOptions};
 use std::io::BufWriter;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Instant;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Context;
 use serde::Serialize;
@@ -36,8 +36,9 @@ const FSYNC_EVERY_ROWS: u64 = 100;
 #[derive(Debug, Serialize)]
 pub struct LogEntry {
     // ── Timing ────────────────────────────────────────────────────────────────
-    /// Milliseconds since rocket boot.
-    pub timestamp_ms: u64,
+    /// Nanoseconds since the Unix epoch (UTC). Falls back to 0 on the
+    /// theoretical case where the system clock is before the epoch.
+    pub timestamp_ns: u128,
 
     // ── State machine ─────────────────────────────────────────────────────────
     pub flight_state: char,
@@ -89,8 +90,6 @@ pub struct LogEntry {
     pub hdop: f32,
     /// Number of satellites used in the position solution.
     pub satellites_used: u8,
-    /// Average GPS SNR from satellites (dB-Hz, 0 if no GSV data yet).
-    pub gps_snr: u8,
     /// Per-constellation SNR (dB-Hz). Zero until the first GSV sentence for
     /// that constellation is received.
     pub gps_snr_gps: u8,
@@ -104,9 +103,6 @@ pub struct LogEntry {
     pub pyro_continuity: bool,
 
     // ── Radio: packet mirrors ─────────────────────────────────────────────────
-    /// Lower-case hex encoding of the last transmitted downlink packet bytes.
-    /// Empty string if no packet has been transmitted yet this session.
-    pub tx_packet_hex: String,
     /// Lower-case hex encoding of the last received uplink / fragment bytes.
     /// Empty string if nothing has been received yet.
     pub rx_packet_hex: String,
@@ -115,13 +111,13 @@ pub struct LogEntry {
 // ── build_log_entry ───────────────────────────────────────────────────────────
 
 /// Build a [`LogEntry`] from the current [`FlightData`] snapshot plus the
-/// raw bytes of the most recently transmitted and received radio packets.
+/// raw bytes of the most recently received radio packet.
 ///
-/// `tx_hex` and `rx_hex` should already be hex-encoded strings; pass empty
-/// strings if no packet has been transmitted / received yet.
-pub fn build_log_entry(data: &FlightData, boot: Instant, tx_hex: &str, rx_hex: &str) -> LogEntry {
+/// `rx_hex` should already be hex-encoded; pass an empty string if no
+/// packet has been received yet.
+pub fn build_log_entry(data: &FlightData, rx_hex: &str) -> LogEntry {
     LogEntry {
-        timestamp_ms: boot.elapsed().as_millis() as u64,
+        timestamp_ns: unix_epoch_nanos(),
         flight_state: data.flight_state.abbrev(),
 
         altitude_m: data.altitude_m,
@@ -159,7 +155,6 @@ pub fn build_log_entry(data: &FlightData, boot: Instant, tx_hex: &str, rx_hex: &
         rtk_fix: data.rtk_fix.to_string(),
         hdop: data.hdop,
         satellites_used: data.satellites_used,
-        gps_snr: data.gps_snr,
         gps_snr_gps: data.gps_snr_gps,
         gps_snr_glonass: data.gps_snr_glonass,
         gps_snr_galileo: data.gps_snr_galileo,
@@ -169,9 +164,17 @@ pub fn build_log_entry(data: &FlightData, boot: Instant, tx_hex: &str, rx_hex: &
         pyro_deployed: data.pyro_deployed,
         pyro_continuity: data.pyro_continuity,
 
-        tx_packet_hex: tx_hex.to_string(),
         rx_packet_hex: rx_hex.to_string(),
     }
+}
+
+/// Nanoseconds elapsed since the Unix epoch (UTC). Returns 0 if the system
+/// clock is set before the epoch — vanishingly unlikely in practice.
+fn unix_epoch_nanos() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
 }
 
 // ── Logger ────────────────────────────────────────────────────────────────────
@@ -274,4 +277,67 @@ fn logger_thread(receiver: mpsc::Receiver<LogEntry>, path: &str) {
         path,
         rows_written
     );
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data_processor::FlightData;
+
+    fn sample_flight_data() -> FlightData {
+        FlightData::default()
+    }
+
+    #[test]
+    fn timestamp_is_unix_epoch_nanoseconds_utc() {
+        let now_ns_lower = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let entry = build_log_entry(&sample_flight_data(), "");
+        let now_ns_upper = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+
+        // Should be a Unix-epoch nanosecond timestamp (well after 1 Jan 2020 UTC),
+        // and bracketed by readings taken just before and just after.
+        let year_2020_ns: u128 = 1_577_836_800u128 * 1_000_000_000u128;
+        assert!(entry.timestamp_ns > year_2020_ns);
+        assert!(entry.timestamp_ns >= now_ns_lower);
+        assert!(entry.timestamp_ns <= now_ns_upper);
+    }
+
+    #[test]
+    fn csv_header_excludes_tx_packet_hex_and_gps_snr() {
+        // Serialise one row via the csv crate; capture the header line.
+        let mut buf: Vec<u8> = Vec::new();
+        {
+            let mut wtr = csv::WriterBuilder::new()
+                .has_headers(true)
+                .from_writer(&mut buf);
+            wtr.serialize(build_log_entry(&sample_flight_data(), ""))
+                .expect("serialise log entry");
+            wtr.flush().unwrap();
+        }
+        let text = String::from_utf8(buf).expect("utf-8");
+        let header = text.lines().next().expect("header line");
+        let cols: Vec<&str> = header.split(',').collect();
+
+        assert!(cols.contains(&"timestamp_ns"), "timestamp_ns missing: {header}");
+        assert!(cols.contains(&"rx_packet_hex"), "rx_packet_hex missing: {header}");
+        assert!(cols.contains(&"gps_snr_gps"), "per-constellation column missing: {header}");
+        assert!(
+            !cols.contains(&"tx_packet_hex"),
+            "tx_packet_hex column must be removed: {header}"
+        );
+        // The bare `gps_snr` column must be gone. Per-constellation columns
+        // start with `gps_snr_` and are still allowed.
+        assert!(
+            !cols.contains(&"gps_snr"),
+            "gps_snr column must be removed: {header}"
+        );
+    }
 }
