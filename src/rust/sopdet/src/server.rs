@@ -11,6 +11,8 @@
 //! | POST   | `/command/emergency`  | Queue an `EmergencyLocate` command               |
 //! | POST   | `/command/emergency/off` | Queue `EmergencyLocateOff`                    |
 //! | POST   | `/command/deploy`     | Queue a `DeployEjectionCharge` command           |
+//! | POST   | `/command/debug/on`   | Enable per-constellation SNR debug downlink      |
+//! | POST   | `/command/debug/off`  | Disable per-constellation SNR debug downlink     |
 //! | POST   | `/resurvey`           | Restart GPS survey-in                            |
 //! | POST   | `/config/svin`        | Set survey-in duration `{"duration_s": N}`       |
 
@@ -313,6 +315,41 @@ fn route(
             (
                 200,
                 serde_json::to_string(&entries).unwrap_or_else(|e| error_json(&e.to_string())),
+            )
+        }
+
+        // ── Enable rocket debug telemetry (per-constellation SNR) ────────────
+        ("POST", "/command/debug/on") => {
+            if let Ok(mut s) = state.lock() {
+                s.pending_commands
+                    .push_back(protocol::GroundCommand::EnableDebugTelemetry);
+                log::info!("HTTP: queued EnableDebugTelemetry command");
+            }
+            (
+                200,
+                serde_json::to_string(&CommandResponse {
+                    status: "queued",
+                    command: "EnableDebugTelemetry",
+                })
+                .unwrap_or_else(|e| error_json(&e.to_string())),
+            )
+        }
+
+        // ── Disable rocket debug telemetry ───────────────────────────────────
+        ("POST", "/command/debug/off") => {
+            if let Ok(mut s) = state.lock() {
+                s.pending_commands
+                    .push_back(protocol::GroundCommand::DisableDebugTelemetry);
+                s.rocket_debug_snr = None;
+                log::info!("HTTP: queued DisableDebugTelemetry command");
+            }
+            (
+                200,
+                serde_json::to_string(&CommandResponse {
+                    status: "queued",
+                    command: "DisableDebugTelemetry",
+                })
+                .unwrap_or_else(|e| error_json(&e.to_string())),
             )
         }
 

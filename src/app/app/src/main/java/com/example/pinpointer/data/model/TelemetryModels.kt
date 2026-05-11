@@ -28,12 +28,18 @@ data class StatusJson(
     @SerializedName("uptime_seconds") val uptimeSeconds: Long,
     @SerializedName("svin_complete") val svinComplete: Boolean,
     @SerializedName("svin_active") val svinActive: Boolean,
+    /** Live survey-in accuracy in metres (0 until first $PQTMSVINSTATUS). */
+    @SerializedName("svin_accuracy_m") val svinAccuracyM: Float = 0f,
+    @SerializedName("svin_observations") val svinObservations: Long = 0L,
+    @SerializedName("svin_elapsed_s") val svinElapsedS: Long = 0L,
     @SerializedName("gps_fix") val gpsFix: GpsFixJson?,
     @SerializedName("telemetry_count") val telemetryCount: Int,
     @SerializedName("last_downlink_rssi") val lastDownlinkRssi: Int?,
     /** Per-constellation SNR at the base station. */
     @SerializedName("gps_snr") val gpsSNR: ConstellationSnrJson = ConstellationSnrJson(),
-    @SerializedName("svin_duration_s") val svinDurationS: Int = 120
+    @SerializedName("svin_duration_s") val svinDurationS: Int = 150,
+    /** Per-constellation SNR from the rocket — null until debug mode is enabled. */
+    @SerializedName("rocket_debug_snr") val rocketDebugSnr: ConstellationSnrJson? = null
 )
 
 data class GpsFixJson(

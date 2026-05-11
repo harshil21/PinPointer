@@ -242,12 +242,20 @@ fn handle_downlink(
         gps_snr: dl.gps_snr,
     };
 
-    let base_snr = if let Ok(mut s) = state.lock() {
+    // Snapshot per-constellation base SNR while we hold the lock so the
+    // telemetry log row contains the exact state at the time of reception.
+    let snapshot = if let Ok(mut s) = state.lock() {
         s.last_downlink_rssi = Some(rssi);
         s.add_telemetry(entry);
-        s.gps_snr.average_active()
+        BaseSnrSnapshot {
+            avg: s.gps_snr.average_active(),
+            gps: s.gps_snr.gps,
+            glonass: s.gps_snr.glonass,
+            galileo: s.gps_snr.galileo,
+            beidou: s.gps_snr.beidou,
+        }
     } else {
-        0
+        BaseSnrSnapshot::default()
     };
 
     // ── Telemetry CSV log ─────────────────────────────────────────────────────
@@ -268,13 +276,26 @@ fn handle_downlink(
         rssi: Some(rssi),
         snr: Some(snr),
         rocket_gps_snr: Some(dl.gps_snr),
-        base_gps_snr: Some(base_snr),
+        base_gps_snr: Some(snapshot.avg),
+        base_snr_gps: Some(snapshot.gps),
+        base_snr_glonass: Some(snapshot.glonass),
+        base_snr_galileo: Some(snapshot.galileo),
+        base_snr_beidou: Some(snapshot.beidou),
         command: None,
         rtk_data_len: None,
         fragment_session: None,
         fragment_index: None,
         fragment_total: None,
     });
+}
+
+#[derive(Default)]
+struct BaseSnrSnapshot {
+    avg: u8,
+    gps: u8,
+    glonass: u8,
+    galileo: u8,
+    beidou: u8,
 }
 
 // ── Uplink / fragment transmission ───────────────────────────────────────────
@@ -327,6 +348,10 @@ fn transmit_rtcm(
                     snr: None,
                     rocket_gps_snr: None,
                     base_gps_snr: None,
+                    base_snr_gps: None,
+                    base_snr_glonass: None,
+                    base_snr_galileo: None,
+                    base_snr_beidou: None,
                     command: Some(command.to_string()),
                     rtk_data_len: Some(data.len()),
                     fragment_session: None,
@@ -381,6 +406,10 @@ fn transmit_rtcm(
                         snr: None,
                         rocket_gps_snr: None,
                         base_gps_snr: None,
+                        base_snr_gps: None,
+                        base_snr_glonass: None,
+                        base_snr_galileo: None,
+                        base_snr_beidou: None,
                         command: None,
                         rtk_data_len: Some(chunk.len()),
                         fragment_session: Some(sid),
@@ -457,6 +486,10 @@ fn transmit_command_only(radio: &mut Rfm95, command: GroundCommand, logger: &Log
                 snr: None,
                 rocket_gps_snr: None,
                 base_gps_snr: None,
+                base_snr_gps: None,
+                base_snr_glonass: None,
+                base_snr_galileo: None,
+                base_snr_beidou: None,
                 command: Some(command.to_string()),
                 rtk_data_len: Some(0),
                 fragment_session: None,

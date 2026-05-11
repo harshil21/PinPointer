@@ -44,7 +44,10 @@ class TelemetryRepository(private val api: SopdetApi) {
             } catch (_: Exception) { /* no telemetry yet or 204 response */
             }
 
-            delay(500)
+            // 250 ms keeps the UI responsive (base-station GPS / SVIN updates
+            // show up within ~half the GPS 1 Hz cadence) without flooding the
+            // sopdet HTTP server.
+            delay(250)
         }
     }
 
@@ -56,6 +59,8 @@ class TelemetryRepository(private val api: SopdetApi) {
     suspend fun stopEmergencyLocate() = api.stopEmergencyLocate()
     suspend fun sendDeployEjection() = api.sendDeployEjection()
     suspend fun requestResurvey() = api.requestResurvey()
+    suspend fun enableDebugTelemetry() = api.enableDebugTelemetry()
+    suspend fun disableDebugTelemetry() = api.disableDebugTelemetry()
     suspend fun setSvinDuration(seconds: Int) = api.setSvinDuration(
         com.example.pinpointer.data.model.SvinConfigBody(seconds)
     )

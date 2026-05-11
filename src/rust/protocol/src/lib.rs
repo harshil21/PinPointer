@@ -477,9 +477,50 @@ mod tests {
 
     #[test]
     fn ground_command_roundtrip() {
-        for v in 0u8..=2 {
+        for v in 0u8..=5 {
             assert_eq!(GroundCommand::from_u8(v).as_u8(), v);
         }
+    }
+
+    #[test]
+    fn debug_downlink_roundtrip() {
+        let pkt = DebugDownlinkPacket {
+            sequence_num: 0x1234,
+            gps: 42,
+            glonass: 35,
+            galileo: 38,
+            beidou: 30,
+            qzss: 25,
+        };
+        let bytes = pkt.serialize();
+        assert_eq!(bytes[0], DEBUG_TYPE);
+        let dec = DebugDownlinkPacket::deserialize(&bytes).expect("deserialise");
+        assert_eq!(dec.sequence_num, 0x1234);
+        assert_eq!(dec.gps, 42);
+        assert_eq!(dec.glonass, 35);
+        assert_eq!(dec.galileo, 38);
+        assert_eq!(dec.beidou, 30);
+        assert_eq!(dec.qzss, 25);
+    }
+
+    #[test]
+    fn debug_downlink_rejects_wrong_type() {
+        let bytes = [0xFF; DebugDownlinkPacket::SIZE];
+        assert!(DebugDownlinkPacket::deserialize(&bytes).is_none());
+    }
+
+    #[test]
+    fn ground_command_debug_telemetry() {
+        assert_eq!(
+            GroundCommand::from_u8(4),
+            GroundCommand::EnableDebugTelemetry
+        );
+        assert_eq!(
+            GroundCommand::from_u8(5),
+            GroundCommand::DisableDebugTelemetry
+        );
+        assert_eq!(GroundCommand::EnableDebugTelemetry.as_u8(), 4);
+        assert_eq!(GroundCommand::DisableDebugTelemetry.as_u8(), 5);
     }
 
     #[test]

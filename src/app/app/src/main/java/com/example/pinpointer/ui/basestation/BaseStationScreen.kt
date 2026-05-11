@@ -313,11 +313,49 @@ private fun SurveyInCard(status: StatusJson?) {
             )
         }
         if (status != null) {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ── Live progress (shown during AND after survey-in) ───────────
+            // Elapsed / target duration
+            val elapsed = status.svinElapsedS
+            val target = status.svinDurationS.toLong()
+            val elapsedText = if (target > 0)
+                "%d / %d s".format(elapsed, target) else "%d s".format(elapsed)
+            MetricRow("Elapsed", elapsedText)
             MetricRow("Min Duration", "${status.svinDurationS} s")
+
+            // Accuracy is always meaningful: small = converged, large = still settling.
+            if (status.svinAccuracyM > 0f) {
+                val accuracyColor = when {
+                    status.svinAccuracyM <= 5f -> MaterialTheme.colorScheme.primary
+                    status.svinAccuracyM <= 15f -> MaterialTheme.colorScheme.tertiary
+                    else -> MaterialTheme.colorScheme.error
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Accuracy",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "%.2f m".format(status.svinAccuracyM),
+                        style = DataTextStyleSmall,
+                        color = accuracyColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            if (status.svinObservations > 0) {
+                MetricRow("Observations", "${status.svinObservations}")
+            }
         }
+
         if (status?.svinComplete == true) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Rounded.CheckCircle,

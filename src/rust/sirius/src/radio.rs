@@ -38,8 +38,8 @@ use std::time::{Duration, Instant};
 use rfm95::{Bandwidth, LoraConfig, Rfm95, Rfm95Error, SpreadingFactor};
 
 use protocol::{
-    DEBUG_TYPE, DOWNLINK_TYPE, DebugDownlinkPacket, DownlinkPacket, FRAG_TYPE, GroundCommand,
-    RtcmFragment, UPLINK_TYPE, UplinkPacket,
+    DOWNLINK_TYPE, DebugDownlinkPacket, DownlinkPacket, FRAG_TYPE, GroundCommand, RtcmFragment,
+    UPLINK_TYPE, UplinkPacket,
 };
 
 use crate::data_processor::FlightData;
@@ -263,6 +263,7 @@ pub fn run_radio_thread(
                     &rx_log_tx,
                     &emergency_flag,
                     &deploy_flag,
+                    &debug_mode,
                     &mut assembler,
                 );
             }
@@ -294,7 +295,12 @@ pub fn run_radio_thread(
             transmit_downlink(&mut radio, &flight_data, &mut tx_sequence, &tx_log_tx, boot);
             // If debug mode is active, follow up with the debug packet.
             if debug_mode.load(Ordering::Relaxed) {
-                transmit_debug(&mut radio, &flight_data, tx_sequence.wrapping_sub(1));
+                transmit_debug(
+                    &mut radio,
+                    &flight_data,
+                    tx_sequence.wrapping_sub(1),
+                    &tx_log_tx,
+                );
             }
             last_tx = Instant::now();
         }
@@ -321,6 +327,7 @@ fn handle_received(
     rx_log_tx: &mpsc::Sender<Vec<u8>>,
     emergency_flag: &Arc<AtomicBool>,
     deploy_flag: &Arc<AtomicBool>,
+    debug_mode: &Arc<AtomicBool>,
     assembler: &mut FragmentAssembler,
 ) {
     if payload.is_empty() {
@@ -426,7 +433,12 @@ fn handle_received(
 
 // ── Debug downlink transmitter ───────────────────────────────────────────────
 
-fn transmit_debug(radio: &mut Rfm95, flight_data: &Arc<Mutex<FlightData>>, seq: u16) {
+fn transmit_debug(
+    radio: &mut Rfm95,
+    flight_data: &Arc<Mutex<FlightData>>,
+    seq: u16,
+    tx_log_tx: &mpsc::Sender<Vec<u8>>,
+) {
     let bytes = {
         let data = flight_data.lock().unwrap();
         DebugDownlinkPacket {
@@ -440,8 +452,12 @@ fn transmit_debug(radio: &mut Rfm95, flight_data: &Arc<Mutex<FlightData>>, seq: 
         .serialize()
         .to_vec()
     };
-    if let Err(e) = radio.transmit(&bytes) {
-        log::warn!("[radio] Debug TX error: {}", e);
+    match radio.transmit(&bytes) {
+        Ok(()) => {
+            log::debug!("[radio] Debug TX {} bytes (seq={})", bytes.len(), seq);
+            let _ = tx_log_tx.send(bytes);
+        }
+        Err(e) => log::warn!("[radio] Debug TX error: {}", e),
     }
     if let Err(e) = radio.start_receive_continuous() {
         log::warn!("[radio] RX restart after debug TX: {}", e);

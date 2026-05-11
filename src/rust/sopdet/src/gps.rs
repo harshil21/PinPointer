@@ -34,7 +34,7 @@ const SVIN_MODE: u8 = 1;
 /// Maximum allowed 3-D position error for the survey-in (metres).
 const SVIN_ACC_LIMIT_M: f32 = 15.0;
 /// Default survey-in duration — overridden at runtime by `AppState::svin_min_duration_s`.
-const SVIN_DEFAULT_DURATION_S: u32 = 120;
+const SVIN_DEFAULT_DURATION_S: u32 = 150;
 
 // ── Timing constants ──────────────────────────────────────────────────────────
 
@@ -244,7 +244,7 @@ pub fn run_gps_thread(
 
         if do_resurvey {
             log::info!("Resurvey requested — restarting GPS survey-in...");
-            let duration_s = state.lock().map(|s| s.svin_min_duration_s).unwrap_or(120);
+            let duration_s = state.lock().map(|s| s.svin_min_duration_s).unwrap_or(150);
             // TODO: Fix this: We should ideally restart the gnss engine (PQTMGNSSSTOP & PQTMGNSSSTART)
             // configure_gps(&mut gps, duration_s);
             log::info!(
@@ -287,7 +287,22 @@ fn handle_wire_message(wire: WireMessage, state: &Arc<Mutex<AppState>>) {
                 gga.hdop,
             );
             if let Ok(mut s) = state.lock() {
-                s.latest_gps = Some(gga);
+                // Don't let a transient "NoFix" GGA (lat=0, lon=0) wipe out a
+                // previously valid fix.  The LC29H occasionally emits a
+                // zero-coord GGA during constellation re-acquisition or
+                // momentary loss of lock; the Android UI would otherwise
+                // briefly show "No GPS Fix" or flicker to 0°/0° and only
+                // recover on the next 1 Hz GGA.  Keep the last known good
+                // fix until a new GGA with non-zero coords arrives.
+                let is_zero = gga.latitude == 0.0 && gga.longitude == 0.0;
+                let had_valid = s
+                    .latest_gps
+                    .as_ref()
+                    .map(|g| g.latitude != 0.0 || g.longitude != 0.0)
+                    .unwrap_or(false);
+                if !(is_zero && had_valid) {
+                    s.latest_gps = Some(gga);
+                }
             }
         }
 

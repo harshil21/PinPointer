@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CrisisAlert
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Warning
@@ -34,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +53,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun CommandsScreen(viewModel: TrackingViewModel) {
     val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsState()
     var showDeployDialog by remember { mutableStateOf(false) }
     var showResurveyDialog by remember { mutableStateOf(false) }
 
@@ -81,7 +84,7 @@ fun CommandsScreen(viewModel: TrackingViewModel) {
                 SimpleCommandCard(
                     icon = Icons.Rounded.MyLocation,
                     title = "Re-Survey Base Station",
-                    description = "Restart GPS survey-in after moving the base station. Survey takes approximately 60 seconds to converge to a fixed position.",
+                    description = "Restart GPS survey-in after moving the base station. Survey takes approximately 150 seconds to converge to a fixed position.",
                     buttonLabel = "Re-Survey",
                     onSend = { showResurveyDialog = true }
                 )
@@ -109,6 +112,28 @@ fun CommandsScreen(viewModel: TrackingViewModel) {
             }
 
             item {
+                DebugTelemetryCard(
+                    enabled = uiState.status?.rocketDebugSnr != null,
+                    onEnable = {
+                        scope.launch {
+                            try {
+                                viewModel.repository.enableDebugTelemetry()
+                            } catch (_: Exception) {
+                            }
+                        }
+                    },
+                    onDisable = {
+                        scope.launch {
+                            try {
+                                viewModel.repository.disableDebugTelemetry()
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
+                )
+            }
+
+            item {
                 DeployCard(onDeploy = { showDeployDialog = true })
             }
         }
@@ -122,7 +147,7 @@ fun CommandsScreen(viewModel: TrackingViewModel) {
             title = { Text("Re-Survey Base Station?") },
             text = {
                 Text(
-                    "This will restart the GPS survey-in process. The base station will lose its fixed position until the survey converges (~60 s). Continue?",
+                    "This will restart the GPS survey-in process. The base station will lose its fixed position until the survey converges (~150 s). Continue?",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -312,6 +337,90 @@ private fun EmergencyLocatorCard(
                         modifier = Modifier.size(16.dp).padding(end = 4.dp)
                     )
                     Text(if (deactivateSent) "Queued ✓" else "Deactivate")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebugTelemetryCard(
+    enabled: Boolean,
+    onEnable: () -> Unit,
+    onDisable: () -> Unit
+) {
+    var enableSent by remember { mutableStateOf(false) }
+    var disableSent by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Rounded.BugReport,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Rocket Debug Telemetry",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Ask the rocket to additionally transmit per-constellation GPS " +
+                        "SNR (GPS / GLONASS / Galileo / BeiDou / QZSS) once per second. " +
+                        "Doubles the LoRa duty cycle while enabled.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val statusColor =
+                    if (enabled) MaterialTheme.colorScheme.tertiary
+                    else MaterialTheme.colorScheme.outline
+                Text(
+                    text = if (enabled) "Debug telemetry: ACTIVE" else "Debug telemetry: off",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = statusColor,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = {
+                        onEnable()
+                        enableSent = true
+                        scope.launch { delay(2000); enableSent = false }
+                    },
+                    enabled = !enabled,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(if (enableSent) "Queued ✓" else "Enable")
+                }
+                OutlinedButton(
+                    onClick = {
+                        onDisable()
+                        disableSent = true
+                        scope.launch { delay(2000); disableSent = false }
+                    },
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(if (disableSent) "Queued ✓" else "Disable")
                 }
             }
         }

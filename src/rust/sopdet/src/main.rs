@@ -101,7 +101,10 @@ fn main() -> anyhow::Result<()> {
     // while issuing the configuration commands (~2–3 seconds total).
     let gps_opt = match gps::setup_and_open(PathBuf::from(GPS_PORT)) {
         Ok(gps) => {
-            log::info!("LC29H GPS ready — survey-in active ({}s / 15.0m)", 60);
+            log::info!(
+                "LC29H GPS ready — survey-in active ({}s / 15.0m)",
+                state.lock().map(|s| s.svin_min_duration_s).unwrap_or(150)
+            );
             Some(gps)
         }
         Err(e) => {

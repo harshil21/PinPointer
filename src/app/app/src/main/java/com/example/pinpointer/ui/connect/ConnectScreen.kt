@@ -42,12 +42,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.pinpointer.data.remote.SopdetApi
+import com.example.pinpointer.util.ConnectionPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -58,19 +60,25 @@ import java.util.concurrent.TimeUnit
 
 @Composable
 fun ConnectScreen(onConnect: (String) -> Unit) {
-    var ipAddress by remember { mutableStateOf("192.168.1.100") }
+    val context = LocalContext.current
+    val prefs = remember(context) { ConnectionPrefs(context) }
+    var ipAddress by remember {
+        mutableStateOf(prefs.lastHost() ?: "192.168.1.100")
+    }
     var isChecking by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     val doConnect = {
         scope.launch {
+            val host = ipAddress.trim()
             isChecking = true
             errorMessage = null
-            if (checkIp(ipAddress.trim())) {
-                onConnect(ipAddress.trim())
+            if (ConnectionPrefs.isValidHostOrIp(host) && checkIp(host)) {
+                prefs.saveHost(host)
+                onConnect(host)
             } else {
-                errorMessage = "Could not reach base station at $ipAddress"
+                errorMessage = "Could not reach base station at $host"
             }
             isChecking = false
         }
@@ -145,7 +153,7 @@ fun ConnectScreen(onConnect: (String) -> Unit) {
                         ipAddress = it
                         errorMessage = null
                     },
-                    label = { Text("Base Station IP Address") },
+                    label = { Text("Base Station Host or IP") },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Rounded.Wifi,
@@ -169,8 +177,12 @@ fun ConnectScreen(onConnect: (String) -> Unit) {
                     singleLine = true,
                     enabled = !isChecking,
                     keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Go
+                        // URI keyboard accepts letters, digits, dots, and hyphens —
+                        // suitable for both IPv4 addresses and hostnames like
+                        // "rtkbase.lan".
+                        keyboardType = KeyboardType.Uri,
+                        imeAction = ImeAction.Go,
+                        autoCorrectEnabled = false
                     ),
                     keyboardActions = KeyboardActions(onGo = { doConnect() }),
                     shape = MaterialTheme.shapes.large,
