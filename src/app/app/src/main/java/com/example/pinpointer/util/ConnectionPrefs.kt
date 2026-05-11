@@ -5,7 +5,8 @@ import android.content.SharedPreferences
 
 /**
  * Persists the most-recently entered base-station host (IPv4 address or DNS
- * hostname) so the login screen can pre-fill it on subsequent launches.
+ * hostname, optionally with a `:port` suffix) so the login screen can pre-fill
+ * it on subsequent launches.
  */
 class ConnectionPrefs(context: Context) {
     private val prefs: SharedPreferences =
@@ -32,9 +33,45 @@ class ConnectionPrefs(context: Context) {
             "^(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$"
         )
 
+        /**
+         * Strip a leading `http://` or `https://` scheme, surrounding whitespace,
+         * and a trailing slash/path. Returns the raw `host[:port]` token.
+         */
+        fun normalize(input: String): String {
+            var s = input.trim()
+            s = s.removePrefix("http://").removePrefix("https://")
+            val slash = s.indexOf('/')
+            if (slash >= 0) s = s.substring(0, slash)
+            return s
+        }
+
+        /**
+         * Accept `host`, `host:port`, IPv4, or IPv4:port. Scheme prefix and a
+         * trailing path are stripped before validation.
+         */
         fun isValidHostOrIp(input: String): Boolean {
-            if (input.isBlank()) return false
-            return IPV4.matches(input) || HOSTNAME.matches(input)
+            val normalized = normalize(input)
+            if (normalized.isBlank()) return false
+            val (host, portPart) = splitHostPort(normalized) ?: return false
+            if (portPart != null) {
+                val port = portPart.toIntOrNull() ?: return false
+                if (port !in 1..65535) return false
+            }
+            return IPV4.matches(host) || HOSTNAME.matches(host)
+        }
+
+        /**
+         * Split `host:port` into (host, port?). Returns null if the input has
+         * multiple unbracketed colons (e.g. malformed IPv6 — not supported).
+         */
+        fun splitHostPort(input: String): Pair<String, String?>? {
+            val colon = input.indexOf(':')
+            if (colon < 0) return input to null
+            if (input.indexOf(':', colon + 1) >= 0) return null
+            val host = input.substring(0, colon)
+            val port = input.substring(colon + 1)
+            if (host.isEmpty() || port.isEmpty()) return null
+            return host to port
         }
     }
 }

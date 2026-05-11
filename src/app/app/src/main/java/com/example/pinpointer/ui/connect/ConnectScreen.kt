@@ -71,7 +71,7 @@ fun ConnectScreen(onConnect: (String) -> Unit) {
 
     val doConnect = {
         scope.launch {
-            val host = ipAddress.trim()
+            val host = ConnectionPrefs.normalize(ipAddress)
             isChecking = true
             errorMessage = null
             if (ConnectionPrefs.isValidHostOrIp(host) && checkIp(host)) {
@@ -237,7 +237,7 @@ fun ConnectScreen(onConnect: (String) -> Unit) {
 suspend fun checkIp(ip: String): Boolean = withContext(Dispatchers.IO) {
     try {
         val api = Retrofit.Builder()
-            .baseUrl("http://$ip:8080/")
+            .baseUrl(baseUrlFor(ip))
             .addConverterFactory(GsonConverterFactory.create())
             .client(
                 OkHttpClient.Builder()
@@ -252,4 +252,15 @@ suspend fun checkIp(ip: String): Boolean = withContext(Dispatchers.IO) {
     } catch (e: Exception) {
         false
     }
+}
+
+/**
+ * Build the sopdet base URL for Retrofit. Accepts `host`, `host:port`, or input
+ * with an `http(s)://` prefix/trailing path (which [ConnectionPrefs.normalize]
+ * has already stripped). Defaults to port 8080 when no port is present.
+ */
+fun baseUrlFor(hostOrHostPort: String): String {
+    val (host, port) = ConnectionPrefs.splitHostPort(hostOrHostPort) ?: (hostOrHostPort to null)
+    val effectivePort = port ?: "8080"
+    return "http://$host:$effectivePort/"
 }

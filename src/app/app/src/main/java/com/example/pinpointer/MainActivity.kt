@@ -36,6 +36,7 @@ import com.example.pinpointer.data.repository.TelemetryRepository
 import com.example.pinpointer.ui.basestation.BaseStationScreen
 import com.example.pinpointer.ui.commands.CommandsScreen
 import com.example.pinpointer.ui.connect.ConnectScreen
+import com.example.pinpointer.ui.connect.baseUrlFor
 import com.example.pinpointer.ui.data.DataScreen
 import com.example.pinpointer.ui.settings.AppSettings
 import com.example.pinpointer.ui.settings.SettingsScreen
@@ -89,7 +90,7 @@ fun AppNavigation(
 
     val api = remember(ip) {
         Retrofit.Builder()
-            .baseUrl("http://$ip:8080/")
+            .baseUrl(baseUrlFor(ip))
             .addConverterFactory(GsonConverterFactory.create())
             .client(
                 OkHttpClient.Builder()
