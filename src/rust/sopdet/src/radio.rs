@@ -13,9 +13,10 @@
 //! The LoRa configuration mirrors the sirius rocket: **SF7 / BW500 / CR4-5 /
 //! 915 MHz** for the highest data rate compatible with the hardware.
 
+use std::collections::BTreeMap;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use protocol::{
     DEBUG_TYPE, DOWNLINK_TYPE, DebugDownlinkPacket, DownlinkPacket, GroundCommand, MAX_FRAG_DATA,
@@ -33,6 +34,84 @@ const TX_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// CPU yield between poll iterations.
 const POLL_SLEEP: Duration = Duration::from_millis(1);
+
+/// Interval at which the consolidated TX UPLINK info log line is emitted.
+const TX_LOG_FLUSH_INTERVAL: Duration = Duration::from_secs(1);
+
+// ── TX UPLINK info-log batcher ───────────────────────────────────────────────
+//
+// `transmit_rtcm` / `transmit_command_only` can fire several times per second
+// (one RTCM frame ≈ one uplink), which previously produced ≥ 1 info log line
+// each.  The batcher records every successful uplink and emits a single
+// consolidated line once per [`TX_LOG_FLUSH_INTERVAL`] summarising counts and
+// payload sizes.  Errors are still logged immediately at their original level
+// so they remain visible.
+struct UplinkLogBatcher {
+    /// Wall-clock instant of the last emitted info line.
+    last_flush: Instant,
+    /// Per-uplink payload byte sizes accumulated since the last flush.
+    /// Capped at 32 entries; older ones are dropped to bound memory.
+    lens: Vec<usize>,
+    /// How many uplinks each command type contributed in the current window.
+    /// Keyed by the command's `Display` string for stable, readable output.
+    commands: BTreeMap<String, u32>,
+    /// Total uplink count (may exceed lens.len() when truncation kicks in).
+    count: u32,
+}
+
+impl UplinkLogBatcher {
+    fn new() -> Self {
+        UplinkLogBatcher {
+            last_flush: Instant::now(),
+            lens: Vec::new(),
+            commands: BTreeMap::new(),
+            count: 0,
+        }
+    }
+
+    fn record(&mut self, command: GroundCommand, payload_len: usize) {
+        self.count += 1;
+        if self.lens.len() < 32 {
+            self.lens.push(payload_len);
+        }
+        *self.commands.entry(command.to_string()).or_insert(0) += 1;
+    }
+
+    fn flush_if_due(&mut self) {
+        if self.count == 0 {
+            self.last_flush = Instant::now();
+            return;
+        }
+        if self.last_flush.elapsed() < TX_LOG_FLUSH_INTERVAL {
+            return;
+        }
+
+        let cmd_summary = self
+            .commands
+            .iter()
+            .map(|(c, n)| format!("{}×{}", c, n))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let lens_summary = if self.lens.len() == self.count as usize {
+            format!("{:?}", self.lens)
+        } else {
+            format!("{:?}+{}more", self.lens, self.count as usize - self.lens.len())
+        };
+
+        log::info!(
+            "TX UPLINK ×{} cmds=[{}] lens={}B",
+            self.count,
+            cmd_summary,
+            lens_summary
+        );
+
+        self.lens.clear();
+        self.commands.clear();
+        self.count = 0;
+        self.last_flush = Instant::now();
+    }
+}
 
 // ── LoRa configuration ────────────────────────────────────────────────────────
 
@@ -91,6 +170,10 @@ pub fn run_radio_thread(
     // Incrementing session identifier for RTCM fragmentation.
     // Wraps at 255 → 0, matching the u8 field in RtcmFragment.
     let mut session_id: u8 = 0;
+
+    // Batches TX UPLINK info logs at 1 Hz so multiple uplinks per second
+    // appear as one consolidated summary line instead of N separate ones.
+    let mut tx_log = UplinkLogBatcher::new();
 
     log::info!("Radio thread active — listening for downlinks from rocket");
 
@@ -162,14 +245,24 @@ pub fn run_radio_thread(
         // GroundCommand::None is used (meaning "RTK data only").
         if let Ok(rtcm_bytes) = rtcm_rx.try_recv() {
             let command = pop_pending_command(&state).unwrap_or(GroundCommand::None);
-            transmit_rtcm(&mut radio, rtcm_bytes, command, &mut session_id, &logger);
+            transmit_rtcm(
+                &mut radio,
+                rtcm_bytes,
+                command,
+                &mut session_id,
+                &logger,
+                &mut tx_log,
+            );
             restart_rx(&mut radio);
         } else if let Some(command) = pop_pending_command(&state) {
             // No RTCM data this tick but the operator issued a command — send
             // it immediately rather than waiting for the next RTCM frame.
-            transmit_command_only(&mut radio, command, &logger);
+            transmit_command_only(&mut radio, command, &logger, &mut tx_log);
             restart_rx(&mut radio);
         }
+
+        // Flush the batched TX UPLINK info log at most once per second.
+        tx_log.flush_if_due();
 
         std::thread::sleep(POLL_SLEEP);
     }
@@ -317,6 +410,7 @@ fn transmit_rtcm(
     command: GroundCommand,
     session_id: &mut u8,
     logger: &Logger,
+    tx_log: &mut UplinkLogBatcher,
 ) {
     if data.len() <= MAX_UPLINK_RTK {
         // ── Single UplinkPacket ───────────────────────────────────────────────
@@ -326,10 +420,9 @@ fn transmit_rtcm(
         };
         let bytes = uplink.serialize();
 
-        log::info!("TX UPLINK cmd={} rtk_len={}", command, data.len());
-
         match radio.transmit_with_timeout(&bytes, TX_TIMEOUT) {
             Ok(_) => {
+                tx_log.record(command, bytes.len());
                 logger.log_telemetry(TelemetryLogEntry {
                     timestamp_ms: unix_ms(),
                     direction: "TX".to_string(),
@@ -448,7 +541,7 @@ fn transmit_rtcm(
         // If the operator also issued a command, send it now as a standalone
         // uplink so it is not silently dropped.
         if command != GroundCommand::None {
-            transmit_command_only(radio, command, logger);
+            transmit_command_only(radio, command, logger, tx_log);
         }
     }
 }
@@ -457,17 +550,21 @@ fn transmit_rtcm(
 ///
 /// Used when there is a pending command but no RTCM frame ready to bundle it
 /// with, or after a fragmented session when the command could not be inlined.
-fn transmit_command_only(radio: &mut Rfm95, command: GroundCommand, logger: &Logger) {
+fn transmit_command_only(
+    radio: &mut Rfm95,
+    command: GroundCommand,
+    logger: &Logger,
+    tx_log: &mut UplinkLogBatcher,
+) {
     let uplink = UplinkPacket {
         command,
         rtk_data: vec![],
     };
     let bytes = uplink.serialize();
 
-    log::info!("TX COMMAND: {}", command);
-
     match radio.transmit_with_timeout(&bytes, TX_TIMEOUT) {
         Ok(_) => {
+            tx_log.record(command, bytes.len());
             logger.log_telemetry(TelemetryLogEntry {
                 timestamp_ms: unix_ms(),
                 direction: "TX".to_string(),
@@ -498,5 +595,78 @@ fn transmit_command_only(radio: &mut Rfm95, command: GroundCommand, logger: &Log
             });
         }
         Err(e) => log::error!("TX COMMAND error ({}): {}", command, e),
+    }
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn batcher_starts_empty() {
+        let b = UplinkLogBatcher::new();
+        assert_eq!(b.count, 0);
+        assert!(b.lens.is_empty());
+        assert!(b.commands.is_empty());
+    }
+
+    #[test]
+    fn batcher_records_count_and_lengths() {
+        let mut b = UplinkLogBatcher::new();
+        b.record(GroundCommand::None, 50);
+        b.record(GroundCommand::None, 100);
+        b.record(GroundCommand::EmergencyLocate, 5);
+        assert_eq!(b.count, 3);
+        assert_eq!(b.lens, vec![50, 100, 5]);
+        assert_eq!(b.commands.get("None"), Some(&2));
+        assert_eq!(b.commands.get("EmergencyLocate"), Some(&1));
+    }
+
+    #[test]
+    fn batcher_caps_lens_vec_at_32() {
+        let mut b = UplinkLogBatcher::new();
+        for i in 0..40 {
+            b.record(GroundCommand::None, i);
+        }
+        assert_eq!(b.count, 40);
+        assert_eq!(b.lens.len(), 32);
+    }
+
+    #[test]
+    fn batcher_flush_clears_state_when_window_elapsed() {
+        let mut b = UplinkLogBatcher::new();
+        b.record(GroundCommand::None, 10);
+        // Force the flush window to have elapsed by rewinding last_flush.
+        b.last_flush = Instant::now()
+            .checked_sub(TX_LOG_FLUSH_INTERVAL + Duration::from_millis(50))
+            .unwrap();
+        b.flush_if_due();
+        assert_eq!(b.count, 0);
+        assert!(b.lens.is_empty());
+        assert!(b.commands.is_empty());
+    }
+
+    #[test]
+    fn batcher_does_not_flush_before_interval() {
+        let mut b = UplinkLogBatcher::new();
+        b.record(GroundCommand::None, 10);
+        // last_flush is fresh — flush should be a no-op.
+        b.flush_if_due();
+        assert_eq!(b.count, 1, "should not have flushed before interval elapsed");
+    }
+
+    #[test]
+    fn batcher_flush_with_no_records_resets_clock_only() {
+        let mut b = UplinkLogBatcher::new();
+        // Even if the window has elapsed, with count==0 we only reset the
+        // clock — no log line, no panic.
+        b.last_flush = Instant::now()
+            .checked_sub(TX_LOG_FLUSH_INTERVAL + Duration::from_secs(5))
+            .unwrap();
+        b.flush_if_due();
+        assert_eq!(b.count, 0);
+        assert!(b.last_flush.elapsed() < Duration::from_secs(1));
     }
 }

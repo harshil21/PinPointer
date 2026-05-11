@@ -222,6 +222,11 @@ fn main() -> anyhow::Result<()> {
     let mut last_tx_hex = String::new();
     let mut last_rx_hex = String::new();
 
+    // Rate-limit the per-constellation SNR info log to once per second.
+    let mut last_snr_log = Instant::now()
+        .checked_sub(Duration::from_secs(2))
+        .unwrap_or_else(Instant::now);
+
     // ── Main loop ─────────────────────────────────────────────────────────────
     loop {
         // ── 1. FIRM data ─────────────────────────────────────────────────────────────────
@@ -341,6 +346,29 @@ fn main() -> anyhow::Result<()> {
                 &last_tx_hex,
                 &last_rx_hex,
             ));
+        }
+
+        // ── 10. Per-constellation SNR info log (once per second when any data) ─
+        if last_snr_log.elapsed() >= Duration::from_secs(1) {
+            let snrs = [
+                flight_data.gps_snr_gps,
+                flight_data.gps_snr_glonass,
+                flight_data.gps_snr_galileo,
+                flight_data.gps_snr_beidou,
+                flight_data.gps_snr_qzss,
+            ];
+            if snrs.iter().any(|&v| v > 0) {
+                log::info!(
+                    "GPS SNR (dB-Hz) — avg={} GPS={} GL={} GA={} GB={} GQ={}",
+                    flight_data.gps_snr,
+                    flight_data.gps_snr_gps,
+                    flight_data.gps_snr_glonass,
+                    flight_data.gps_snr_galileo,
+                    flight_data.gps_snr_beidou,
+                    flight_data.gps_snr_qzss,
+                );
+            }
+            last_snr_log = Instant::now();
         }
     }
 

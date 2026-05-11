@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use rtk::WireMessage;
@@ -224,6 +224,13 @@ pub fn run_gps_thread(
         }
     }
 
+    let mut snr_log_ctx = SnrLogCtx {
+        last_log: Instant::now()
+            .checked_sub(Duration::from_secs(2))
+            .unwrap_or_else(Instant::now),
+        dirty: false,
+    };
+
     loop {
         // ── Resurvey check ────────────────────────────────────────────────────
         // The HTTP server sets resurvey_requested when the operator calls
@@ -264,16 +271,44 @@ pub fn run_gps_thread(
 
         // ── NMEA / PQTM messages ─────────────────────────────────────────────
         while let Some(wire) = gps.try_get_gps_data() {
-            handle_wire_message(wire, &state);
+            handle_wire_message(wire, &state, &mut snr_log_ctx);
+        }
+
+        // Emit a consolidated per-constellation SNR info line once per second.
+        if snr_log_ctx.dirty && snr_log_ctx.last_log.elapsed() >= Duration::from_secs(1) {
+            if let Ok(s) = state.lock() {
+                log::info!(
+                    "Base GPS SNR (dB-Hz) — avg_active={} GPS={} GL={} GA={} GB={} GQ={}",
+                    s.gps_snr.average_active(),
+                    s.gps_snr.gps,
+                    s.gps_snr.glonass,
+                    s.gps_snr.galileo,
+                    s.gps_snr.beidou,
+                    s.gps_snr.qzss,
+                );
+            }
+            snr_log_ctx.last_log = Instant::now();
+            snr_log_ctx.dirty = false;
         }
 
         std::thread::sleep(GPS_POLL_SLEEP);
     }
 }
 
+/// Tracking state for the 1 Hz consolidated GPS-SNR info log.
+struct SnrLogCtx {
+    last_log: Instant,
+    /// Set whenever a GSV update lands; cleared on the next emitted line.
+    dirty: bool,
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-fn handle_wire_message(wire: WireMessage, state: &Arc<Mutex<AppState>>) {
+fn handle_wire_message(
+    wire: WireMessage,
+    state: &Arc<Mutex<AppState>>,
+    snr_log_ctx: &mut SnrLogCtx,
+) {
     match wire {
         // GPS fix data from NMEA GGA sentences.
         WireMessage::NmeaGga(gga) => {
@@ -367,14 +402,16 @@ fn handle_wire_message(wire: WireMessage, state: &Arc<Mutex<AppState>>) {
 
         // All other PQTM / PAIR messages are ignored by the polling loop
         // (command responses are consumed synchronously during setup).
-        // Average SNR update from satellite view sentences.
+        // Average SNR update from satellite view sentences. The consolidated
+        // info-level summary is emitted once per second in the polling loop
+        // (see SnrLogCtx); per-GSV detail stays at debug to avoid spam.
         WireMessage::NmeaGsv(gsv) => {
             let avg = gsv.avg_snr();
             let cname = gsv.constellation.as_str();
             let total = gsv.satellites.len();
             let with_snr = gsv.satellites.iter().filter(|s| s.snr.is_some()).count();
 
-            log::info!(
+            log::debug!(
                 "GSV: {}/{} {} satellites have SNR, avg = {} dB-Hz",
                 with_snr,
                 total,
@@ -397,13 +434,8 @@ fn handle_wire_message(wire: WireMessage, state: &Arc<Mutex<AppState>>) {
                         NavIc => s.gps_snr.navic = avg,
                         _ => {} // GN and Unknown: skip
                     }
-                    log::debug!(
-                        "AppState::gps_snr {} -> {} dB-Hz  (avg_active={})",
-                        cname,
-                        avg,
-                        s.gps_snr.average_active()
-                    );
                 }
+                snr_log_ctx.dirty = true;
             } else {
                 log::debug!("GSV: {} has no tracked satellites — skipping update", cname);
             }
