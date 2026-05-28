@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.math.sqrt
 
 enum class SignalState {
     GPS_FIX,       // GPS or RTK fix active
@@ -54,6 +55,17 @@ class TrackingViewModel(
     private val rssiDirectionFinder = RssiDirectionFinder()
     private var lastSeenSeq: Int = -1
 
+    /**
+     * Local phone-side timestamp (ms) of the last time we observed a new
+     * sequence number from the rocket.  This intentionally does NOT use
+     * [TelemetryJson.receivedAt] because Sopdet runs on a Raspberry Pi whose
+     * system clock is often un-synced at a launch site (no internet → no NTP,
+     * no GPS fix → no GPSDO).  Using the server timestamp would make
+     * [secondsSince] astronomically large, permanently forcing LOST_CONTACT
+     * even while packets are flowing.
+     */
+    private var localLastContactMs: Long = 0L
+
     private val _forceRssiOnly = MutableStateFlow(false)
     fun setForceRssiOnly(value: Boolean) {
         _forceRssiOnly.value = value
@@ -89,8 +101,14 @@ class TrackingViewModel(
 
         // ── Signal state ───────────────────────────────────────────────────────
         val now = System.currentTimeMillis()
-        val lastMs = telemetry?.receivedAt ?: 0L
-        val secondsSince = if (lastMs == 0L) 9999L else (now - lastMs) / 1000L
+        // Advance local contact clock on every NEW sequence number so the
+        // freshness check is immune to clock skew between Sopdet and the phone.
+        if (telemetry != null && telemetry.sequenceNum != lastSeenSeq) {
+            localLastContactMs = now
+        }
+        val secondsSince =
+            if (localLastContactMs == 0L) 9999L
+            else (now - localLastContactMs) / 1000L
 
         val signalState = when {
             telemetry == null || secondsSince > 5L -> SignalState.LOST_CONTACT
@@ -115,7 +133,7 @@ class TrackingViewModel(
                 telemetry.gpsLat, telemetry.gpsLon
             )
             val vDiff = (telemetry.gpsAltM - status.gpsFix.altitudeM).toDouble()
-            distanceM = Math.sqrt(hDist * hDist + vDiff * vDiff)
+            distanceM = sqrt(hDist * hDist + vDiff * vDiff)
             targetAzimuth = CoordinateMath.calculateBearing(
                 status.gpsFix.latitude, status.gpsFix.longitude,
                 telemetry.gpsLat, telemetry.gpsLon
@@ -132,7 +150,13 @@ class TrackingViewModel(
         when (signalState) {
             SignalState.GPS_FIX -> {
                 rssiDirectionFinder.clear()
-                lastSeenSeq = -1
+                // Note: lastSeenSeq is intentionally NOT reset here.
+                // Resetting it to -1 would cause every combine emission to
+                // satisfy (seq != -1), perpetually refreshing localLastContactMs
+                // for a stale cached packet and preventing LOST_CONTACT from
+                // triggering if the rocket goes silent while a GPS fix is held.
+                // Any real packet after the GPS fix is released will have a
+                // different sequence number, so RSSI sampling still works correctly.
             }
 
             SignalState.RSSI_ONLY -> {

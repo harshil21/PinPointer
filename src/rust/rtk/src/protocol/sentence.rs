@@ -1,4 +1,4 @@
-use crate::protocol::commands::{PQTMCfgMsgRate, PQTMCfgSvin};
+use crate::protocol::commands::{PQTMCfgMsgRate, PQTMCfgNmeaDp, PQTMCfgSvin};
 use crate::protocol::helpers::{StatusField, parse_status_and_rest, wrap_sentence};
 use crate::protocol::pair::{
     PairACK, PairCommand, PairCommonSetNmeaOutputRate, PairRTCMSetOutputAntPnt,
@@ -32,6 +32,8 @@ impl Serialize for PQTMCommand {
             PQTMCommand::CfgMsgRateRead(cfg_get) => wrap_sentence(&cfg_get.to_fields()),
             PQTMCommand::CfgRcvrModeRead => wrap_sentence("PQTMCFGRCVRMODE"),
             PQTMCommand::CfgRcvrModeWrite(cfg) => wrap_sentence(&cfg.to_fields()),
+            PQTMCommand::CfgNmeaDpWrite(cfg) => wrap_sentence(&cfg.to_fields()),
+            PQTMCommand::CfgNmeaDpRead => wrap_sentence("PQTMCFGNMEADP,R")
         }
     }
 }
@@ -110,6 +112,22 @@ impl Deserialize for PQTMResponse {
             "PQTMCFGRCVRMODE" => match parse_status_and_rest(parts)? {
                 StatusField::Ok(_) => Ok(PQTMResponse::CfgRcvrModeWriteOk),
                 StatusField::Err(e) => Ok(PQTMResponse::CfgRcvrError(e)),
+            },
+            "PQTMCFGNMEADP" => {
+                match parse_status_and_rest(parts)? {
+                    StatusField::Ok(mut rest) => {
+                        if rest.clone().next().is_none() {
+                            // Write response: OK only:
+                            Ok(PQTMResponse::CfgNmeaDpWriteOk)
+                        } else {
+                            // Read response:
+                            Ok(PQTMResponse::CfgNmeaDpReadOk(PQTMCfgNmeaDp::from_fields(
+                                &mut rest,
+                            )?))
+                        }
+                    }
+                    StatusField::Err(e) => Ok(PQTMResponse::CfgNmeaDpError(e)),
+                }
             },
             _ => Err(ParseError::ParsingError("Unknown sentence header")),
         }

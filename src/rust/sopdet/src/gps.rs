@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use rtk::WireMessage;
 use rtk::port::BaseGPS;
-use rtk::protocol::commands::{PQTMCfgMsgRate, PQTMCfgRcvrMode, PQTMCfgSvin, PQTMMsgName};
+use rtk::protocol::commands::{PQTMCfgMsgRate, PQTMCfgNmeaDp, PQTMCfgRcvrMode, PQTMCfgSvin, PQTMMsgName};
 use rtk::protocol::pair::{
     NmeaOutputRateTypes, PairCommonSetNmeaOutputRate, PairRTCMSetOutputAntPnt,
     PairRTCMSetOutputMode, RtcmAntPnt, RtcmMode,
@@ -47,7 +47,7 @@ const GPS_POLL_SLEEP: Duration = Duration::from_millis(100);
 
 /// How long to wait after starting the reader thread before issuing the first
 /// command, to give the UART buffer time to prime.
-const STARTUP_SETTLE: Duration = Duration::from_millis(500);
+const STARTUP_SETTLE: Duration = Duration::from_millis(800);
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -163,6 +163,7 @@ fn configure_gps(gps: &mut BaseGPS, svin_duration_s: u32) {
     //     Err(e) => log::warn!("Failed to save to nvm {:?}", e)
     // }
 
+    // Enable output of NMEA sentences
     for sentence_type in [
         PQTMMsgName::RMC,
         PQTMMsgName::GGA,
@@ -186,6 +187,23 @@ fn configure_gps(gps: &mut BaseGPS, svin_duration_s: u32) {
             ),
         }
     }
+
+    // Make coordinates more precise (6 decimal places -> 8)
+    match gps.cfg_nmea_dp_write(
+        PQTMCfgNmeaDp{
+            utc_dp: 3,
+            pos_dp: 8,
+            alt_dp: 3,
+            dop_dp: 2,
+            spd_dp: 3,
+            cog_dp: 2,
+        }, CMD_TIMEOUT) {
+            Ok(_) => log::info!("Increased decimal precision for coords"),
+            Err(e) => log::warn!(
+                "Failed to increase decimal precision: {:?}",
+                e
+            ),
+        }
 
     log::info!("Saving parameters to flash ($PQTMSAVEPAR)...");
     match gps.save_par(CMD_TIMEOUT) {
@@ -313,7 +331,7 @@ fn handle_wire_message(
         // GPS fix data from NMEA GGA sentences.
         WireMessage::NmeaGga(gga) => {
             log::debug!(
-                "GGA fix={:?} sats={} lat={:.6} lon={:.6} alt={:.1}m hdop={:.1}",
+                "GGA fix={:?} sats={} lat={:.8} lon={:.8} alt={:.1}m hdop={:.1}",
                 gga.fix_quality,
                 gga.satellites_used,
                 gga.latitude,

@@ -205,7 +205,7 @@ fun TrackingScreen(viewModel: TrackingViewModel) {
                         modifier = Modifier.weight(1f),
                         label = "Baro Alt",
                         value = t?.altitudeM ?: 0f,
-                        formatValue = { "%.1f m".format(it) },
+                        formatValue = { "%.2f m".format(it) },
                         trendThreshold = 0.3f
                     )
                     BigMetricCard(
@@ -214,7 +214,7 @@ fun TrackingScreen(viewModel: TrackingViewModel) {
                         value = if (gpsAltRelative && firstGpsAlt != null)
                             (t?.gpsAltM ?: 0f) - (firstGpsAlt ?: 0f)
                         else t?.gpsAltM ?: 0f,
-                        formatValue = { "%.1f m".format(it) },
+                        formatValue = { "%.2f m".format(it) },
                         trendThreshold = 0.3f,
                         clickLabel = if (gpsAltRelative) "Switch to MSL" else "Switch to AGL",
                         onClick = { gpsAltRelative = !gpsAltRelative },
@@ -279,7 +279,7 @@ fun TrackingScreen(viewModel: TrackingViewModel) {
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "GPS  %.5f°  %.5f°".format(t.gpsLat, t.gpsLon),
+                            text = "GPS  %.8f°  %.8f°".format(t.gpsLat, t.gpsLon),
                             style = DataTextStyleSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -622,8 +622,8 @@ private fun AntennaPointingSection(
         }, label = "dotC"
     )
 
-    val distStr = if (uiState.distanceM < 1000) "%.0f m".format(uiState.distanceM)
-    else "%.2f km".format(uiState.distanceM / 1000)
+    val distStr = if (uiState.distanceM < 1000) "%.2f m".format(uiState.distanceM)
+    else "%.3f km".format(uiState.distanceM / 1000f)
 
     // Container and radar canvas both follow the active theme — no hardcoded dark bg.
     val containerColor = MaterialTheme.colorScheme.background

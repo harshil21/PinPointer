@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::protocol::commands::{
-    PQTMCfgMsgRate, PQTMCfgMsgRateGet, PQTMCfgRcvrMode, PQTMCfgSvin, PQTMCommand,
+    PQTMCfgMsgRate, PQTMCfgMsgRateGet, PQTMCfgRcvrMode, PQTMCfgSvin, PQTMCommand, PQTMCfgNmeaDp
 };
 use crate::protocol::pair::{
     AckResult, PairACK, PairCommand, PairCommonSetNmeaOutputRate, PairRTCMSetOutputAntPnt,
@@ -156,6 +156,18 @@ impl BaseGPS {
             command: PQTMCommand::CfgRcvrModeWrite(mode),
             ok: PQTMResponse::CfgRcvrModeWriteOk => (),
             err: PQTMResponse::CfgRcvrError(e) => e,
+        }
+
+        cfg_nmea_dp_read() -> PQTMCfgNmeaDp {
+            command: PQTMCommand::CfgNmeaDpRead,
+            ok: PQTMResponse::CfgNmeaDpReadOk(nmea_dp) => nmea_dp,
+            err: PQTMResponse::CfgNmeaDpError(e) => e,
+        }
+
+        cfg_nmea_dp_write(cfg: PQTMCfgNmeaDp) -> () {
+            command: PQTMCommand::CfgNmeaDpWrite(cfg),
+            ok: PQTMResponse::CfgNmeaDpWriteOk => (),
+            err: PQTMResponse::CfgNmeaDpError(e) => e,
         }
     }
     // PAIR GET commands (wait for ACK + response)

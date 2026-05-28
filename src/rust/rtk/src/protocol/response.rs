@@ -2,7 +2,7 @@ use crate::protocol::commands::PQTMCfgRcvrMode;
 use crate::protocol::nmea::{GgaData, GsvData};
 use crate::protocol::pair::PairResponse;
 
-use super::commands::{PQTMCfgMsgRate, PQTMCfgSvin};
+use super::commands::{PQTMCfgMsgRate, PQTMCfgSvin, PQTMCfgNmeaDp};
 
 #[derive(Debug, Clone)]
 pub enum WireMessage {
@@ -38,6 +38,11 @@ pub enum PQTMResponse {
     CfgRcvrModeWriteOk,
     CfgRcvrModeReadOk(PQTMCfgRcvrMode),
     CfgRcvrError(PQTMModuleError),
+
+    CfgNmeaDpWriteOk,
+    CfgNmeaDpReadOk(PQTMCfgNmeaDp),
+    CfgNmeaDpError(PQTMModuleError)
+    
 }
 
 /// Represents errors returned by the GPS module.

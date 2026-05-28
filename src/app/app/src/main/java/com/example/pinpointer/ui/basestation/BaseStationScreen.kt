@@ -185,9 +185,9 @@ private fun GpsStatusCard(gpsFix: GpsFixJson?, gpsSNR: ConstellationSnrJson) {
                     fontWeight = FontWeight.SemiBold, color = fixColor
                 )
             }
-            MetricRow("Latitude", "%.6f°".format(gpsFix.latitude))
-            MetricRow("Longitude", "%.6f°".format(gpsFix.longitude))
-            MetricRow("Altitude", "%.1f m".format(gpsFix.altitudeM))
+            MetricRow("Latitude", "%.8f°".format(gpsFix.latitude))
+            MetricRow("Longitude", "%.8f°".format(gpsFix.longitude))
+            MetricRow("Altitude", "%.2f m".format(gpsFix.altitudeM))
             MetricRow("Satellites", "${gpsFix.satellitesUsed}")
             MetricRow("HDOP", "%.2f".format(gpsFix.hdop))
         }
