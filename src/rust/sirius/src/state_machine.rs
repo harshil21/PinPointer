@@ -102,6 +102,10 @@ pub struct StateChecker {
     /// Highest vertical velocity observed during MotorBurn.  Used to detect
     /// burnout by watching for velocity to fall below 98 % of this value.
     max_velocity_mps: f32,
+
+    /// Time spent in the current state (seconds).
+    time_in_state_s: f64,
+    state_start_time_s: f64,
 }
 
 impl StateChecker {
@@ -111,6 +115,8 @@ impl StateChecker {
             state: FlightState::Standby,
             max_alt_m: 0.0,
             max_velocity_mps: 0.0,
+            time_in_state_s: 0.0,
+            state_start_time_s: -1.0,
         }
     }
 
@@ -143,6 +149,14 @@ impl StateChecker {
 
         let prev_state = self.state;
 
+        // Update time in state:
+        if self.state_start_time_s < 0.0 {
+            // First-ever packet; initialize state start time.
+            self.state_start_time_s = data.timestamp_seconds;
+        } else {
+            self.time_in_state_s = data.timestamp_seconds - self.state_start_time_s;
+        }
+
         match self.state {
             // ── Standby → MotorBurn ──────────────────────────────────────────
             // Trigger: altitude clearly above pad level AND strong upward thrust.
@@ -150,6 +164,8 @@ impl StateChecker {
                 if alt > LAUNCH_ALT_THRESHOLD_M && accel_z > LAUNCH_ACCEL_THRESHOLD_G {
                     self.state = FlightState::MotorBurn;
                     self.max_alt_m = alt;
+                    self.time_in_state_s = 0.0;
+                    self.state_start_time_s = data.timestamp_seconds;
                     self.max_velocity_mps = vel.max(0.0);
                     log::info!(
                         "STATE → MotorBurn  alt={:.1} m  accel_z={:.2} g  vel={:.1} m/s",
@@ -161,9 +177,6 @@ impl StateChecker {
             }
 
             // ── MotorBurn → Coast ────────────────────────────────────────────
-            // Trigger: velocity has dropped below 98 % of the peak seen so far,
-            // and we have actually built up meaningful speed (MIN_PEAK_VEL_MPS)
-            // so we don't false-trigger right at ignition.
             FlightState::MotorBurn => {
                 // Keep rolling maximum.
                 if vel > self.max_velocity_mps {
@@ -173,10 +186,11 @@ impl StateChecker {
                     self.max_alt_m = alt;
                 }
 
-                if self.max_velocity_mps >= MIN_PEAK_VEL_MPS
-                    && vel < COAST_VEL_FRACTION * self.max_velocity_mps
+                if self.time_in_state_s > 6.0 // Motor has 6 second burn time
                 {
                     self.state = FlightState::Coast;
+                    self.time_in_state_s = 0.0;
+                    self.state_start_time_s = data.timestamp_seconds;
                     log::info!(
                         "STATE → Coast  vel={:.1} m/s  peak_vel={:.1} m/s  alt={:.1} m",
                         vel,
@@ -194,8 +208,10 @@ impl StateChecker {
                     self.max_alt_m = alt;
                 }
 
-                if vel < 0.0 && alt < FREEFALL_ALT_FRACTION * self.max_alt_m {
+                if alt < FREEFALL_ALT_FRACTION * self.max_alt_m {
                     self.state = FlightState::Freefall;
+                    self.time_in_state_s = 0.0;
+                    self.state_start_time_s = data.timestamp_seconds;
                     log::info!(
                         "STATE → Freefall  vel={:.1} m/s  alt={:.1} m  apogee={:.1} m",
                         vel,
@@ -211,6 +227,8 @@ impl StateChecker {
             FlightState::Freefall => {
                 if accel_z.abs() > LANDING_ACCEL_THRESHOLD_G {
                     self.state = FlightState::Landed;
+                    self.time_in_state_s = 0.0;
+                    self.state_start_time_s = data.timestamp_seconds;
                     log::info!(
                         "STATE → Landed  |accel_z|={:.2} g  alt={:.1} m  apogee={:.1} m",
                         accel_z.abs(),

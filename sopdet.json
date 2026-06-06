@@ -5,7 +5,7 @@
   "password": null,
   "key": "/home/harshil/.ssh/id_ed25519",
   "target_folder": "/home/harshil/Documents/PinPointer/target/",
-  "target": "aarch64-unknown-linux-gnu",
+  "target": "aarch64-unknown-linux-musl",
   "remote_folder": "/home/harshil/PinPointer/",
   "profile": "release"
 }
