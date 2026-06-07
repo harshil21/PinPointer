@@ -12,6 +12,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
+use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
@@ -180,6 +181,26 @@ fn run_telemetry_logger(path: String, rx: Receiver<TelemetryLogEntry>) {
         }
     };
 
+    // Persist the directory entry so the file survives a hard power cut.
+    // See logger.rs in sirius for a full explanation.
+    let parent_dir = Path::new(&path).parent().unwrap_or_else(|| Path::new("."));
+    if let Ok(dir) = File::open(parent_dir) {
+        if let Err(e) = dir.sync_all() {
+            log::warn!("Could not fsync telemetry log parent directory: {}", e);
+        }
+    }
+
+    // Keep a raw file handle alongside the csv Writer so we can call
+    // sync_all() after flushing — flush() only drains the BufWriter into
+    // the OS page cache; sync_all() (fsync) commits it to storage.
+    let sync_file = match file.try_clone() {
+        Ok(f) => f,
+        Err(e) => {
+            log::error!("Cannot clone telemetry log file handle: {}", e);
+            return;
+        }
+    };
+
     let mut writer = csv::Writer::from_writer(BufWriter::new(file));
     let mut row_count: u32 = 0;
 
@@ -192,11 +213,15 @@ fn run_telemetry_logger(path: String, rx: Receiver<TelemetryLogEntry>) {
             if let Err(e) = writer.flush() {
                 log::error!("Telemetry CSV flush error: {}", e);
             }
+            if let Err(e) = sync_file.sync_all() {
+                log::error!("Telemetry CSV fsync error: {}", e);
+            }
         }
     }
 
     // Channel closed — drain and flush before exiting.
     let _ = writer.flush();
+    let _ = sync_file.sync_all();
     log::info!(
         "Telemetry logger thread exiting ({} rows written)",
         row_count
@@ -217,6 +242,22 @@ fn run_access_logger(path: String, rx: Receiver<AccessLogEntry>) {
         }
     };
 
+    // Persist the directory entry in case this is a newly-created file.
+    let parent_dir = Path::new(&path).parent().unwrap_or_else(|| Path::new("."));
+    if let Ok(dir) = File::open(parent_dir) {
+        if let Err(e) = dir.sync_all() {
+            log::warn!("Could not fsync access log parent directory: {}", e);
+        }
+    }
+
+    let sync_file = match file.try_clone() {
+        Ok(f) => f,
+        Err(e) => {
+            log::error!("Cannot clone access log file handle: {}", e);
+            return;
+        }
+    };
+
     let mut writer = BufWriter::new(file);
     let mut line_count: u32 = 0;
 
@@ -229,9 +270,13 @@ fn run_access_logger(path: String, rx: Receiver<AccessLogEntry>) {
         if let Err(e) = writer.flush() {
             log::error!("Access log flush error: {}", e);
         }
+        if let Err(e) = sync_file.sync_all() {
+            log::error!("Access log fsync error: {}", e);
+        }
     }
 
     let _ = writer.flush();
+    let _ = sync_file.sync_all();
     log::info!(
         "Access logger thread exiting ({} lines written)",
         line_count

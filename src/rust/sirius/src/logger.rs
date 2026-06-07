@@ -11,6 +11,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::BufWriter;
+use std::path::Path;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -231,6 +232,28 @@ fn logger_thread(receiver: mpsc::Receiver<LogEntry>, path: &str) {
         .open(path)
         .unwrap_or_else(|e| panic!("Cannot open flight log '{}': {}", path, e));
 
+    // Persist the directory entry so the file survives a hard power cut.
+    //
+    // fsync on the file handle only commits the file's data and inode to disk.
+    // The parent directory holds a separate data block mapping this filename to
+    // that inode.  If we don't fsync the directory, a hard shutdown before the
+    // filesystem flushes that block leaves the inode orphaned — the file appears
+    // gone on the next boot even though its data reached storage.
+    let parent_dir = Path::new(path).parent().unwrap_or_else(|| Path::new("."));
+    match File::open(parent_dir) {
+        Ok(dir) => {
+            if let Err(e) = dir.sync_all() {
+                eprintln!("[logger] WARNING: could not fsync parent directory: {}", e);
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "[logger] WARNING: could not open parent directory for fsync: {}",
+                e
+            );
+        }
+    }
+
     // Clone the file descriptor now — we need it for fsync after the
     // BufWriter has been flushed.
     let sync_file: File = file
@@ -326,9 +349,18 @@ mod tests {
         let header = text.lines().next().expect("header line");
         let cols: Vec<&str> = header.split(',').collect();
 
-        assert!(cols.contains(&"timestamp_ns"), "timestamp_ns missing: {header}");
-        assert!(cols.contains(&"rx_packet_hex"), "rx_packet_hex missing: {header}");
-        assert!(cols.contains(&"gps_snr_gps"), "per-constellation column missing: {header}");
+        assert!(
+            cols.contains(&"timestamp_ns"),
+            "timestamp_ns missing: {header}"
+        );
+        assert!(
+            cols.contains(&"rx_packet_hex"),
+            "rx_packet_hex missing: {header}"
+        );
+        assert!(
+            cols.contains(&"gps_snr_gps"),
+            "per-constellation column missing: {header}"
+        );
         assert!(
             !cols.contains(&"tx_packet_hex"),
             "tx_packet_hex column must be removed: {header}"

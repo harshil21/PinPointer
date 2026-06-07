@@ -1,5 +1,5 @@
 {
-  "host": "rtkbase.lan",
+  "host": "10.16.67.202",
   "port": 22,
   "username": "harshil",
   "password": null,

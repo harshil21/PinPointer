@@ -81,10 +81,10 @@ fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all("logs").context("Cannot create logs/ directory")?;
 
     let dt = chrono::Local::now().format("%y%m%d_%H%M%S").to_string();
-    let telemetry_log = format!("logs/sopdet_{}.csv", dt);
+    let telemetry_log = format!("/home/harshil/PinPointer/logs/sopdet_{}.csv", dt);
     // Single persistent plain-text log for all HTTP server activity.
     // No date prefix — opened in append mode so all runs share one file.
-    let access_log = "logs/sopdet_http.log".to_string();
+    let access_log = "/home/harshil/PinPointer/logs/sopdet_http.log".to_string();
 
     log::info!("Telemetry log → {}", telemetry_log);
     log::info!("HTTP log      → {}", access_log);

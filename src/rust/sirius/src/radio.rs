@@ -252,12 +252,12 @@ pub fn run_radio_thread(
                 // the same packet.
                 let _ = radio.clear_irq_flags();
 
-                // Record contact and clear any stale contact-lost flag.
-                had_contact = true;
-                last_rx = Some(Instant::now());
-                contact_lost_flag.store(false, Ordering::Relaxed);
-
-                handle_received(
+                // Only count this as ground-station contact if it parses as a
+                // recognised uplink or fragment.  Spurious LoRa packets from
+                // other devices can pass CRC and arrive here; treating them as
+                // contact would start the CONTACT_LOST_TIMEOUT countdown and
+                // trigger the emergency buzzer 5 s later.
+                let valid_contact = handle_received(
                     &pkt.payload,
                     &rtk_tx,
                     &rx_log_tx,
@@ -266,6 +266,12 @@ pub fn run_radio_thread(
                     &debug_mode,
                     &mut assembler,
                 );
+
+                if valid_contact {
+                    had_contact = true;
+                    last_rx = Some(Instant::now());
+                    contact_lost_flag.store(false, Ordering::Relaxed);
+                }
             }
 
             Ok(None) => {
@@ -321,6 +327,10 @@ pub fn run_radio_thread(
 
 // ── Received packet handler ───────────────────────────────────────────────────
 
+/// Process a received payload and return `true` if it was a valid, recognised
+/// ground-station packet (uplink command or RTCM fragment).  Returns `false`
+/// for unknown/reflected/unparseable payloads so that spurious radio noise
+/// does not start the contact-lost countdown.
 fn handle_received(
     payload: &[u8],
     rtk_tx: &mpsc::Sender<Vec<u8>>,
@@ -329,9 +339,9 @@ fn handle_received(
     deploy_flag: &Arc<AtomicBool>,
     debug_mode: &Arc<AtomicBool>,
     assembler: &mut FragmentAssembler,
-) {
+) -> bool {
     if payload.is_empty() {
-        return;
+        return false;
     }
 
     match payload[0] {
@@ -384,6 +394,7 @@ fn handle_received(
 
                     // Log the raw bytes.
                     let _ = rx_log_tx.send(payload.to_vec());
+                    return true;
                 }
 
                 None => {
@@ -407,6 +418,7 @@ fn handle_received(
                     if is_last {
                         let _ = rx_log_tx.send(payload.to_vec());
                     }
+                    return true;
                 }
 
                 None => {
@@ -429,6 +441,7 @@ fn handle_received(
             );
         }
     }
+    false
 }
 
 // ── Debug downlink transmitter ───────────────────────────────────────────────

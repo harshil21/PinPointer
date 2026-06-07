@@ -45,9 +45,9 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use time::{OffsetDateTime, UtcOffset};
 
 use anyhow::Context;
+use chrono;
 use gpio_cdev::{Chip, LineRequestFlags};
 
 use firm_rust::FIRMClient;
@@ -88,14 +88,8 @@ fn main() -> anyhow::Result<()> {
 
     let boot = Instant::now();
 
-    let dt = OffsetDateTime::now_utc();
-    let local = dt.to_offset(UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC));
-
-    let fmt =
-        time::format_description::parse("[year repr:last_two][month][day]_[hour][minute][second]")
-            .unwrap();
-    let dt_str = local.format(&fmt).unwrap();
-    let log_path = format!("logs/sirius_{}.csv", dt_str);
+    let dt = chrono::Local::now().format("%y%m%d_%H%M%S").to_string();
+    let log_path = format!("/home/harshil/PinPointer/logs/sirius_{}.csv", dt);
 
     log::info!("╔══════════════════════════════════════╗");
     log::info!("║   Sirius Flight Computer — Startup   ║");
@@ -322,10 +316,10 @@ fn main() -> anyhow::Result<()> {
         // This clone is the only lock in the hot path and is held for < 1 µs.
         *radio_flight_data.lock().unwrap() = flight_data.clone();
 
-        // ── 7. Buzzer pattern ─────────────────────────────────────────────────
+        // ── 7. Buzzer pattern ─────────────────────────────────────────────
         let emergency = emergency_flag.load(Ordering::Relaxed);
         let contact_lost = contact_lost_flag.load(Ordering::Relaxed);
-        update_buzzer(&flight_data, emergency || contact_lost, &buzzer);
+        update_buzzer(&flight_data, emergency, contact_lost, &buzzer);
 
         // ── 8. Drain radio log bytes (non-blocking) ────────────────────────────────────
         // TX bytes are still drained so the channel never backs up, but the
@@ -412,31 +406,39 @@ fn fire_pyro(pin: &gpio_cdev::LineHandle, data: &mut FlightData, freefall_trigge
 /// Derive the appropriate [`BuzzerPattern`] from the current flight state and
 /// update the controller only when the pattern changes (to avoid resetting a
 /// mid-sequence on every loop iteration).
-fn update_buzzer(data: &FlightData, emergency: bool, buzzer: &BuzzerController) {
-    let desired = if emergency {
+fn update_buzzer(
+    data: &FlightData,
+    emergency: bool,
+    contact_lost: bool,
+    buzzer: &BuzzerController,
+) {
+    let desired = if emergency || contact_lost {
         // Emergency takes priority over everything — continuous loud tone.
-        // log::info!("Emergency signal active — switching buzzer to EMERGENCY pattern");
         BuzzerPattern::Emergency
     } else if data.flight_state == FlightState::Landed {
         // Beep out the apogee altitude so the recovery team can log it.
-        // log::info!("Landed — switching buzzer to APOGEE ANNOUNCE pattern ({} m)", data.apogee_m);
         BuzzerPattern::ApogeeAnnounce(data.apogee_m as u32)
     } else if data.flight_state == FlightState::Standby {
         // On the pad: indicate pyro continuity status.
         if data.pyro_continuity {
-            // log::info!("Standby — pyro continuity OK");
             BuzzerPattern::StandbyContinuity
         } else {
-            // log::info!("Standby — NO pyro continuity");
             BuzzerPattern::StandbyNoContinuity
         }
     } else {
         // Airborne (MotorBurn / Coast / Freefall) — stay silent.
-        // log::info!("Airborne (state={:?}) — buzzer silent", data.flight_state);
         BuzzerPattern::Silent
     };
 
     if buzzer.get_pattern() != desired {
+        if desired == BuzzerPattern::Emergency {
+            let reason = if emergency {
+                "EmergencyLocate command from ground station"
+            } else {
+                "contact lost (no valid uplink within timeout)"
+            };
+            log::info!("Buzzer → CONTINUOUS EMERGENCY tone ({})", reason);
+        }
         buzzer.set_pattern(desired);
     }
 }
