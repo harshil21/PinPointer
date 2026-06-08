@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use rfm95::{PinConfig, Rfm95};
@@ -79,6 +80,17 @@ fn main() -> anyhow::Result<()> {
     //   sopdet_access_<unix>.csv     — HTTP endpoint accesses
     // Create the logs/ directory if it doesn't already exist.
     std::fs::create_dir_all("logs").context("Cannot create logs/ directory")?;
+
+    // Wait for NTP sync before generating the timestamp-based log filename.
+    // The Pi has no RTC, so on boot it restores the fake-hwclock time (typically
+    // the previous shutdown time). NTP corrects it shortly after, but
+    // chrono::Local::now() called before that sync completes stamps the file
+    // with yesterday's (or older) date.
+    if wait_for_ntp_sync(Duration::from_secs(30)) {
+        log::info!("Clock NTP-synchronized — using current time for log filename");
+    } else {
+        log::warn!("NTP sync timed out after 30 s — log filename may use an incorrect timestamp");
+    }
 
     let dt = chrono::Local::now().format("%y%m%d_%H%M%S").to_string();
     let telemetry_log = format!("/home/harshil/PinPointer/logs/sopdet_{}.csv", dt);
@@ -191,7 +203,7 @@ fn main() -> anyhow::Result<()> {
     log::info!("  POST http://{SERVER_ADDR}/command/deploy");
 
     loop {
-        std::thread::sleep(std::time::Duration::from_secs(60));
+        thread::sleep(Duration::from_secs(60));
         log_status_summary(&state);
     }
 }
@@ -241,5 +253,30 @@ fn log_status_summary(state: &Arc<Mutex<AppState>>) {
                 telem.rssi,
             );
         }
+    }
+}
+
+/// Block until systemd-timesyncd reports the clock is NTP-synchronized, or
+/// until `timeout` elapses. Returns `true` if the clock synced in time.
+///
+/// The Pi has no RTC, so at boot the system time is whatever fake-hwclock last
+/// saved. NTP corrects it within seconds of getting network, but we must not
+/// generate the log filename until after that correction.
+fn wait_for_ntp_sync(timeout: Duration) -> bool {
+    use std::process::Command;
+    let deadline = Instant::now() + timeout;
+    loop {
+        let synced = Command::new("timedatectl")
+            .args(["show", "--property=NTPSynchronized", "--value"])
+            .output()
+            .map(|o| o.stdout.starts_with(b"yes"))
+            .unwrap_or(false);
+        if synced {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(500));
     }
 }

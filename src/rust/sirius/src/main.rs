@@ -88,6 +88,17 @@ fn main() -> anyhow::Result<()> {
 
     let boot = Instant::now();
 
+    // Wait for NTP sync before generating the timestamp-based log filename.
+    // The Pi has no RTC, so on boot it restores the fake-hwclock time (typically
+    // the previous shutdown time). NTP corrects it shortly after, but
+    // chrono::Local::now() called before that sync completes stamps the file
+    // with yesterday's (or older) date.
+    if wait_for_ntp_sync(Duration::from_secs(30)) {
+        log::info!("Clock NTP-synchronized — using current time for log filename");
+    } else {
+        log::warn!("NTP sync timed out after 30 s — log filename may use an incorrect timestamp");
+    }
+
     let dt = chrono::Local::now().format("%y%m%d_%H%M%S").to_string();
     let log_path = format!("/home/harshil/PinPointer/logs/sirius_{}.csv", dt);
 
@@ -463,4 +474,29 @@ fn gga_fix_to_rtk(fix: GpsFixQuality) -> RtkFixType {
 /// Encode a byte slice as a lower-case hex string for the CSV log.
 fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// Block until systemd-timesyncd reports the clock is NTP-synchronized, or
+/// until `timeout` elapses. Returns `true` if the clock synced in time.
+///
+/// The Pi has no RTC, so at boot the system time is whatever fake-hwclock last
+/// saved. NTP corrects it within seconds of getting network, but we must not
+/// generate the log filename until after that correction.
+fn wait_for_ntp_sync(timeout: Duration) -> bool {
+    use std::process::Command;
+    let deadline = Instant::now() + timeout;
+    loop {
+        let synced = Command::new("timedatectl")
+            .args(["show", "--property=NTPSynchronized", "--value"])
+            .output()
+            .map(|o| o.stdout.starts_with(b"yes"))
+            .unwrap_or(false);
+        if synced {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(500));
+    }
 }
