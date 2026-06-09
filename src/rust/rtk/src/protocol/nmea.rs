@@ -119,3 +119,89 @@ impl GgaData {
         })
     }
 }
+
+// ── GSV (Satellites in View) ──────────────────────────────────────────────────
+
+/// Which GNSS constellation a GSV sentence belongs to, derived from its
+/// two-character talker ID (e.g. `$GP` → GPS, `$GL` → GLONASS).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GsvConstellation {
+    Gps,                // GP – GPS / NAVSTAR
+    Glonass,            // GL – GLONASS
+    Galileo,            // GA – Galileo
+    BeiDou,             // GB – BeiDou
+    Qzss,               // GQ – QZSS
+    NavIc,              // GI – NavIC / IRNSS
+    MultiConstellation, // GN – combined talker
+    #[default]
+    Unknown,
+}
+
+impl GsvConstellation {
+    pub fn from_talker(talker: &str) -> Self {
+        match talker {
+            "GP" => GsvConstellation::Gps,
+            "GL" => GsvConstellation::Glonass,
+            "GA" => GsvConstellation::Galileo,
+            "GB" => GsvConstellation::BeiDou,
+            "GQ" => GsvConstellation::Qzss,
+            "GI" => GsvConstellation::NavIc,
+            "GN" => GsvConstellation::MultiConstellation,
+            _ => GsvConstellation::Unknown,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            GsvConstellation::Gps => "GPS",
+            GsvConstellation::Glonass => "GLONASS",
+            GsvConstellation::Galileo => "Galileo",
+            GsvConstellation::BeiDou => "BeiDou",
+            GsvConstellation::Qzss => "QZSS",
+            GsvConstellation::NavIc => "NavIC",
+            GsvConstellation::MultiConstellation => "Multi",
+            GsvConstellation::Unknown => "Unknown",
+        }
+    }
+}
+
+/// A single satellite entry extracted from an NMEA GSV sentence.
+#[derive(Debug, Clone)]
+pub struct GsvSatellite {
+    /// Satellite PRN number.
+    pub prn: u8,
+    /// Signal-to-noise ratio in dB-Hz, or `None` if the satellite is not
+    /// currently being tracked.
+    pub snr: Option<u8>,
+}
+
+/// Aggregated satellite data from a complete NMEA GSV sequence.
+///
+/// A single GSV sequence may span multiple sentences (up to 4 satellites per
+/// sentence).  This struct is emitted once the final sentence in the sequence
+/// has been received, so `satellites` contains the full set.
+#[derive(Debug, Clone)]
+pub struct GsvData {
+    /// All satellites reported in this sequence.
+    pub satellites: Vec<GsvSatellite>,
+    /// Which constellation this sequence belongs to.
+    pub constellation: GsvConstellation,
+}
+
+impl GsvData {
+    /// Compute the average SNR over all satellites that have a valid reading.
+    ///
+    /// Satellites without an SNR value (e.g. acquired but not tracked) are
+    /// excluded from the average.  Returns `0` if no satellite has an SNR.
+    pub fn avg_snr(&self) -> u8 {
+        let mut sum: u32 = 0;
+        let mut count: u32 = 0;
+        for sat in &self.satellites {
+            if let Some(snr) = sat.snr {
+                sum += snr as u32;
+                count += 1;
+            }
+        }
+        if count > 0 { (sum / count) as u8 } else { 0 }
+    }
+}

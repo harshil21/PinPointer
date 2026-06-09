@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use rfm95::{PinConfig, Rfm95};
@@ -29,7 +30,7 @@ use state::AppState;
 // ── Hardware configuration ────────────────────────────────────────────────────
 
 /// UART device for the Quectel LC29H GPS module.
-const GPS_PORT: &str = "/dev/ttyAMA0";
+const GPS_PORT: &str = "/dev/ttyS0";
 
 /// SPI device for the RFM95W LoRa radio.
 const SPI_PATH: &str = "/dev/spidev0.0";
@@ -80,11 +81,22 @@ fn main() -> anyhow::Result<()> {
     // Create the logs/ directory if it doesn't already exist.
     std::fs::create_dir_all("logs").context("Cannot create logs/ directory")?;
 
-    let dt = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-    let telemetry_log = format!("logs/{}_sopdet_telemetry.csv", dt);
+    // Wait for NTP sync before generating the timestamp-based log filename.
+    // The Pi has no RTC, so on boot it restores the fake-hwclock time (typically
+    // the previous shutdown time). NTP corrects it shortly after, but
+    // chrono::Local::now() called before that sync completes stamps the file
+    // with yesterday's (or older) date.
+    if wait_for_ntp_sync(Duration::from_secs(30)) {
+        log::info!("Clock NTP-synchronized — using current time for log filename");
+    } else {
+        log::warn!("NTP sync timed out after 30 s — log filename may use an incorrect timestamp");
+    }
+
+    let dt = chrono::Local::now().format("%y%m%d_%H%M%S").to_string();
+    let telemetry_log = format!("/home/harshil/PinPointer/logs/sopdet_{}.csv", dt);
     // Single persistent plain-text log for all HTTP server activity.
     // No date prefix — opened in append mode so all runs share one file.
-    let access_log = "logs/sopdet_http.log".to_string();
+    let access_log = "/home/harshil/PinPointer/logs/sopdet_http.log".to_string();
 
     log::info!("Telemetry log → {}", telemetry_log);
     log::info!("HTTP log      → {}", access_log);
@@ -99,10 +111,19 @@ fn main() -> anyhow::Result<()> {
     // setup_and_open opens the UART, starts the reader thread, configures
     // survey-in, saves parameters, and enables RTCM output.  This call blocks
     // while issuing the configuration commands (~2–3 seconds total).
-    let gps = gps::setup_and_open(PathBuf::from(GPS_PORT))
-        .with_context(|| format!("Cannot initialise LC29H GPS on '{}'", GPS_PORT))?;
-
-    log::info!("LC29H GPS ready — survey-in active ({}s / 15.0m)", 60);
+    let gps_opt = match gps::setup_and_open(PathBuf::from(GPS_PORT)) {
+        Ok(gps) => {
+            log::info!(
+                "LC29H GPS ready — survey-in active ({}s / 15.0m)",
+                state.lock().map(|s| s.svin_min_duration_s).unwrap_or(150)
+            );
+            Some(gps)
+        }
+        Err(e) => {
+            log::warn!("Cannot initialise LC29H GPS on '{}': {}", GPS_PORT, e);
+            None
+        }
+    };
 
     // Channel for raw RTCM bytes flowing from the GPS thread to the radio
     // thread.  The channel is unbounded; RTCM frames are small (≤ a few
@@ -110,37 +131,48 @@ fn main() -> anyhow::Result<()> {
     // concern in practice.
     let (rtcm_tx, rtcm_rx) = mpsc::channel::<Vec<u8>>();
 
-    {
+    if let Some(gps) = gps_opt {
         let state = Arc::clone(&state);
         thread::Builder::new()
             .name("gps".to_string())
             .spawn(move || gps::run_gps_thread(gps, rtcm_tx, state))
             .context("Cannot spawn GPS thread")?;
+    } else {
+        log::warn!("GPS not connected, skipping GPS thread");
     }
 
     // ── RFM95 LoRa Radio ──────────────────────────────────────────────────────
-    let radio = Rfm95::open(
+    let radio_opt = match Rfm95::open(
         SPI_PATH,
         PinConfig {
             gpio_chip: GPIO_CHIP.to_string(),
             reset_pin: RFM95_RESET_PIN,
             dio0_pin: Some(RFM95_DIO0_PIN),
         },
-    )
-    .with_context(|| format!("Cannot open RFM95 on '{}'", SPI_PATH))?;
+    ) {
+        Ok(radio) => {
+            log::info!(
+                "RFM95 ready — reset=GPIO17 DIO0=GPIO{} DIO1=GPIO6 DIO2=GPIO26",
+                RFM95_DIO0_PIN,
+            );
+            Some(radio)
+        }
+        Err(e) => {
+            log::warn!("Cannot open RFM95 on '{}': {}", SPI_PATH, e);
+            None
+        }
+    };
 
-    log::info!(
-        "RFM95 ready — reset=GPIO17 DIO0=GPIO{} DIO1=GPIO6 DIO2=GPIO26",
-        RFM95_DIO0_PIN,
-    );
-
-    {
+    if let Some(radio) = radio_opt {
         let state = Arc::clone(&state);
         let radio_logger = logger.clone();
         thread::Builder::new()
             .name("radio".to_string())
             .spawn(move || radio::run_radio_thread(radio, state, rtcm_rx, radio_logger))
             .context("Cannot spawn radio thread")?;
+    } else {
+        log::warn!("Radio not connected, skipping radio thread");
+        drop(rtcm_rx); // Prevent unbounded queue growth if GPS thread is sending RTCM bytes
     }
 
     // ── HTTP Server ───────────────────────────────────────────────────────────
@@ -171,7 +203,7 @@ fn main() -> anyhow::Result<()> {
     log::info!("  POST http://{SERVER_ADDR}/command/deploy");
 
     loop {
-        std::thread::sleep(std::time::Duration::from_secs(60));
+        thread::sleep(Duration::from_secs(60));
         log_status_summary(&state);
     }
 }
@@ -201,6 +233,15 @@ fn log_status_summary(state: &Arc<Mutex<AppState>>) {
             );
         }
 
+        log::info!(
+            "Base GPS SNR — avg_active={}dBHz  GPS={}  GL={}  GA={}  GB={}",
+            s.gps_snr.average_active(),
+            s.gps_snr.gps,
+            s.gps_snr.glonass,
+            s.gps_snr.galileo,
+            s.gps_snr.beidou
+        );
+
         if let Some(telem) = s.telemetry.last() {
             log::info!(
                 "Last telemetry — seq={} alt={:.1}m vel={:.1}m/s state={} fix={} rssi={}dBm",
@@ -212,5 +253,30 @@ fn log_status_summary(state: &Arc<Mutex<AppState>>) {
                 telem.rssi,
             );
         }
+    }
+}
+
+/// Block until systemd-timesyncd reports the clock is NTP-synchronized, or
+/// until `timeout` elapses. Returns `true` if the clock synced in time.
+///
+/// The Pi has no RTC, so at boot the system time is whatever fake-hwclock last
+/// saved. NTP corrects it within seconds of getting network, but we must not
+/// generate the log filename until after that correction.
+fn wait_for_ntp_sync(timeout: Duration) -> bool {
+    use std::process::Command;
+    let deadline = Instant::now() + timeout;
+    loop {
+        let synced = Command::new("timedatectl")
+            .args(["show", "--property=NTPSynchronized", "--value"])
+            .output()
+            .map(|o| o.stdout.starts_with(b"yes"))
+            .unwrap_or(false);
+        if synced {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(500));
     }
 }

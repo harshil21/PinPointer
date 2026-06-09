@@ -241,23 +241,28 @@ impl BaseGPS {
             while !stop_signal.load(Ordering::Acquire) {
                 match reader.read(&mut serial_buf) {
                     Ok(t) if t > 0 => {
+                        log::trace!("[GPS-PORT] Read {} bytes from serial", t);
                         // Parse NMEA sentences (text-based)
                         let chunk = String::from_utf8_lossy(&serial_buf[..t]).into_owned();
                         for msg in nmea_parser.parse_data(&chunk) {
-                            // println!("Parsed GPS message: {:?}", msg);
+                            log::trace!("[GPS-PORT] Dispatching parsed message: {:?}", msg);
                             dispatcher.dispatch(msg);
                         }
 
                         // Parse RTCM messages (binary)
                         for rtcm_msg in rtcm_parser.parse_data(&serial_buf[..t]) {
-                            // println!("Parsed RTCM message type: {}", rtcm_msg.message_type);
+                            log::trace!(
+                                "[GPS-PORT] RTCM type={} len={}",
+                                rtcm_msg.message_type,
+                                rtcm_msg.raw_data.len()
+                            );
                             let _ = rtcm_tx.send(rtcm_msg);
                         }
                     }
 
                     Ok(_) => continue, // No data read, continue
                     Err(e) => {
-                        eprintln!("Error reading from GPS port: {}", e);
+                        log::error!("[GPS-PORT] Serial read error: {}", e);
                         break;
                     }
                 }

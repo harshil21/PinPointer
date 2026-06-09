@@ -18,11 +18,11 @@ use firm_core::firm_packets::ProcessedFIRMData;
 // ── Threshold constants ───────────────────────────────────────────────────────
 
 /// Minimum altitude (m AGL) required before launch is declared.
-const LAUNCH_ALT_THRESHOLD_M: f32 = 10.0;
+const LAUNCH_ALT_THRESHOLD_M: f32 = 20.0;
 
 /// Minimum raw Z-acceleration (g) for launch detection.
 /// Derived from 20 m/s² net acceleration: 20 / 9.81 ≈ 2.039 g.
-const LAUNCH_ACCEL_THRESHOLD_G: f32 = 20.0 / 9.81;
+const LAUNCH_ACCEL_THRESHOLD_G: f32 = 30.0 / 9.81;
 
 /// Fraction of peak velocity below which burnout / coast is declared.
 /// Requires peak velocity > MIN_PEAK_VEL_MPS to prevent a false trigger
@@ -63,14 +63,14 @@ impl FlightState {
     pub fn as_u8(self) -> u8 {
         self as u8
     }
-    
+
     pub const fn abbrev(self) -> char {
         match self {
-            FlightState::Standby   => 'S',
+            FlightState::Standby => 'S',
             FlightState::MotorBurn => 'M',
-            FlightState::Coast     => 'C',
-            FlightState::Freefall  => 'F',
-            FlightState::Landed    => 'L',
+            FlightState::Coast => 'C',
+            FlightState::Freefall => 'F',
+            FlightState::Landed => 'L',
         }
     }
 }
@@ -78,11 +78,11 @@ impl FlightState {
 impl std::fmt::Display for FlightState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FlightState::Standby   => write!(f, "Standby"),
+            FlightState::Standby => write!(f, "Standby"),
             FlightState::MotorBurn => write!(f, "MotorBurn"),
-            FlightState::Coast     => write!(f, "Coast"),
-            FlightState::Freefall  => write!(f, "Freefall"),
-            FlightState::Landed    => write!(f, "Landed"),
+            FlightState::Coast => write!(f, "Coast"),
+            FlightState::Freefall => write!(f, "Freefall"),
+            FlightState::Landed => write!(f, "Landed"),
         }
     }
 }
@@ -102,6 +102,10 @@ pub struct StateChecker {
     /// Highest vertical velocity observed during MotorBurn.  Used to detect
     /// burnout by watching for velocity to fall below 98 % of this value.
     max_velocity_mps: f32,
+
+    /// Time spent in the current state (seconds).
+    time_in_state_s: f64,
+    state_start_time_s: f64,
 }
 
 impl StateChecker {
@@ -111,6 +115,8 @@ impl StateChecker {
             state: FlightState::Standby,
             max_alt_m: 0.0,
             max_velocity_mps: 0.0,
+            time_in_state_s: 0.0,
+            state_start_time_s: -1.0,
         }
     }
 
@@ -136,12 +142,20 @@ impl StateChecker {
     ///
     /// Returns `true` if the state changed as a result of this call.
     pub fn update(&mut self, data: &ProcessedFIRMData) -> bool {
-        let alt     = data.est_position_z_meters;
-        let vel     = data.est_velocity_z_meters_per_s;
+        let alt = data.est_position_z_meters;
+        let vel = data.est_velocity_z_meters_per_s;
         // raw_rotated_acceleration_z_gs is in g-units (includes reaction to gravity).
         let accel_z = data.raw_rotated_acceleration_z_gs;
 
         let prev_state = self.state;
+
+        // Update time in state:
+        if self.state_start_time_s < 0.0 {
+            // First-ever packet; initialize state start time.
+            self.state_start_time_s = data.timestamp_seconds;
+        } else {
+            self.time_in_state_s = data.timestamp_seconds - self.state_start_time_s;
+        }
 
         match self.state {
             // ── Standby → MotorBurn ──────────────────────────────────────────
@@ -150,18 +164,19 @@ impl StateChecker {
                 if alt > LAUNCH_ALT_THRESHOLD_M && accel_z > LAUNCH_ACCEL_THRESHOLD_G {
                     self.state = FlightState::MotorBurn;
                     self.max_alt_m = alt;
+                    self.time_in_state_s = 0.0;
+                    self.state_start_time_s = data.timestamp_seconds;
                     self.max_velocity_mps = vel.max(0.0);
                     log::info!(
                         "STATE → MotorBurn  alt={:.1} m  accel_z={:.2} g  vel={:.1} m/s",
-                        alt, accel_z, vel
+                        alt,
+                        accel_z,
+                        vel
                     );
                 }
             }
 
             // ── MotorBurn → Coast ────────────────────────────────────────────
-            // Trigger: velocity has dropped below 98 % of the peak seen so far,
-            // and we have actually built up meaningful speed (MIN_PEAK_VEL_MPS)
-            // so we don't false-trigger right at ignition.
             FlightState::MotorBurn => {
                 // Keep rolling maximum.
                 if vel > self.max_velocity_mps {
@@ -171,13 +186,16 @@ impl StateChecker {
                     self.max_alt_m = alt;
                 }
 
-                if self.max_velocity_mps >= MIN_PEAK_VEL_MPS
-                    && vel < COAST_VEL_FRACTION * self.max_velocity_mps
+                if self.time_in_state_s > 6.0 // Motor has 6 second burn time
                 {
                     self.state = FlightState::Coast;
+                    self.time_in_state_s = 0.0;
+                    self.state_start_time_s = data.timestamp_seconds;
                     log::info!(
                         "STATE → Coast  vel={:.1} m/s  peak_vel={:.1} m/s  alt={:.1} m",
-                        vel, self.max_velocity_mps, alt
+                        vel,
+                        self.max_velocity_mps,
+                        alt
                     );
                 }
             }
@@ -190,11 +208,15 @@ impl StateChecker {
                     self.max_alt_m = alt;
                 }
 
-                if vel < 0.0 && alt < FREEFALL_ALT_FRACTION * self.max_alt_m {
+                if alt < FREEFALL_ALT_FRACTION * self.max_alt_m {
                     self.state = FlightState::Freefall;
+                    self.time_in_state_s = 0.0;
+                    self.state_start_time_s = data.timestamp_seconds;
                     log::info!(
                         "STATE → Freefall  vel={:.1} m/s  alt={:.1} m  apogee={:.1} m",
-                        vel, alt, self.max_alt_m
+                        vel,
+                        alt,
+                        self.max_alt_m
                     );
                 }
             }
@@ -205,9 +227,13 @@ impl StateChecker {
             FlightState::Freefall => {
                 if accel_z.abs() > LANDING_ACCEL_THRESHOLD_G {
                     self.state = FlightState::Landed;
+                    self.time_in_state_s = 0.0;
+                    self.state_start_time_s = data.timestamp_seconds;
                     log::info!(
                         "STATE → Landed  |accel_z|={:.2} g  alt={:.1} m  apogee={:.1} m",
-                        accel_z.abs(), alt, self.max_alt_m
+                        accel_z.abs(),
+                        alt,
+                        self.max_alt_m
                     );
                 }
             }

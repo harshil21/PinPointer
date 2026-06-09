@@ -1,26 +1,26 @@
-use crate::protocol::{response::ParseError};
+use crate::protocol::response::ParseError;
 
 #[derive(Debug, Clone)]
 pub enum PairCommand {
-    RtcmSetOutputMode(PairRTCMSetOutputMode),       // PAIR432
-    RtcmGetOutputMode,                              // PAIR433
-    RtcmSetOutputAntPnt(PairRTCMSetOutputAntPnt),   // PAIR434
-    RtcmGetOutputAntPnt,                            // PAIR435
+    RtcmSetOutputMode(PairRTCMSetOutputMode),     // PAIR432
+    RtcmGetOutputMode,                            // PAIR433
+    RtcmSetOutputAntPnt(PairRTCMSetOutputAntPnt), // PAIR434
+    RtcmGetOutputAntPnt,                          // PAIR435
     RtcmSetOutputEphemeris(PairRTCMSetOutputEphemeris), // PAIR436
-    RtcmGetOutputEphemeris,                         // PAIR437
+    RtcmGetOutputEphemeris,                       // PAIR437
+    NvramSaveSetting,                             // PAIR513
+    CommonSetNmeaOutputRate(PairCommonSetNmeaOutputRate), // PAIR062
 }
-
 
 #[derive(Debug, Clone)]
 pub enum PairResponse {
-    ACK(PairACK),                                   // PAIR001
-    RtcmOutputMode(PairRTCMSetOutputMode),          // PAIR433 response
-    RtcmOutputAntPnt(PairRTCMSetOutputAntPnt),      // PAIR435 response
-    RtcmOutputEphemeris(PairRTCMSetOutputEphemeris),// PAIR437 response
-    RequestAiding(PairRequestAiding),               // PAIR010
-    SystemWakeUp,                                   // PAIR012
+    ACK(PairACK),                                    // PAIR001
+    RtcmOutputMode(PairRTCMSetOutputMode),           // PAIR433 response
+    RtcmOutputAntPnt(PairRTCMSetOutputAntPnt),       // PAIR435 response
+    RtcmOutputEphemeris(PairRTCMSetOutputEphemeris), // PAIR437 response
+    RequestAiding(PairRequestAiding),                // PAIR010
+    SystemWakeUp,                                    // PAIR012
 }
-
 
 #[derive(Debug, Clone)]
 pub struct PairACK {
@@ -29,7 +29,7 @@ pub struct PairACK {
 }
 
 impl PairACK {
-    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError> 
+    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError>
     where
         I: Iterator<Item = &'a str>,
     {
@@ -54,11 +54,7 @@ impl PairACK {
             5 => AckResult::Busy,
             _ => return Err(ParseError::ParsingError("invalid result value")),
         };
-        Ok(PairACK {
-            command_id,
-            result,
-        })
-        
+        Ok(PairACK { command_id, result })
     }
 
     pub fn to_fields(&self) -> String {
@@ -82,7 +78,7 @@ pub struct PairRTCMSetOutputMode {
 }
 
 impl PairRTCMSetOutputMode {
-    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError> 
+    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError>
     where
         I: Iterator<Item = &'a str>,
     {
@@ -98,9 +94,7 @@ impl PairRTCMSetOutputMode {
             1 => RtcmMode::Rtcm3Msm7,
             _ => return Err(ParseError::ParsingError("invalid mode value")),
         };
-        Ok(PairRTCMSetOutputMode {
-            mode,
-        })
+        Ok(PairRTCMSetOutputMode { mode })
     }
 
     pub fn to_fields(&self) -> String {
@@ -124,7 +118,7 @@ pub struct PairRTCMSetOutputAntPnt {
 }
 
 impl PairRTCMSetOutputAntPnt {
-    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError> 
+    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError>
     where
         I: Iterator<Item = &'a str>,
     {
@@ -139,9 +133,7 @@ impl PairRTCMSetOutputAntPnt {
             1 => RtcmAntPnt::Enable,
             _ => return Err(ParseError::ParsingError("invalid ant_pnt value")),
         };
-        Ok(PairRTCMSetOutputAntPnt {
-            ant_pnt,
-        })
+        Ok(PairRTCMSetOutputAntPnt { ant_pnt })
     }
 
     pub fn to_fields(&self) -> String {
@@ -163,7 +155,7 @@ pub struct PairRTCMSetOutputEphemeris {
 }
 
 impl PairRTCMSetOutputEphemeris {
-    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError> 
+    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError>
     where
         I: Iterator<Item = &'a str>,
     {
@@ -178,9 +170,7 @@ impl PairRTCMSetOutputEphemeris {
             1 => RtcmEphemeris::Enable,
             _ => return Err(ParseError::ParsingError("invalid ephemeris value")),
         };
-        Ok(PairRTCMSetOutputEphemeris {
-            ephemeris,
-        })
+        Ok(PairRTCMSetOutputEphemeris { ephemeris })
     }
 
     pub fn to_fields(&self) -> String {
@@ -209,7 +199,7 @@ pub struct PairRequestAiding {
 }
 
 impl PairRequestAiding {
-    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError> 
+    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError>
     where
         I: Iterator<Item = &'a str>,
     {
@@ -288,4 +278,70 @@ pub enum GnssSystem {
     Galileo = 2,
     BeiDou = 3,
     Qzss = 4,
+}
+
+#[derive(Debug, Clone)]
+pub struct PairCommonSetNmeaOutputRate {
+    pub _type: NmeaOutputRateTypes,
+    pub output_rate: u8,
+}
+
+impl PairCommonSetNmeaOutputRate {
+    pub fn from_fields<'a, I>(it: &mut I) -> Result<Self, ParseError>
+    where
+        I: Iterator<Item = &'a str>,
+    {
+        let nmea_type = it
+            .next()
+            .ok_or(ParseError::ParsingError("type not found"))?;
+        let nmea_type_u8: u8 = nmea_type
+            .parse()
+            .map_err(|_| ParseError::ParsingError("invalid type"))?;
+        let nmea_type_enum = match nmea_type_u8 {
+            0 => NmeaOutputRateTypes::GGA,
+            1 => NmeaOutputRateTypes::GLL,
+            2 => NmeaOutputRateTypes::GSA,
+            3 => NmeaOutputRateTypes::GSV,
+            4 => NmeaOutputRateTypes::RMC,
+            5 => NmeaOutputRateTypes::VTG,
+            6 => NmeaOutputRateTypes::ZDA,
+            7 => NmeaOutputRateTypes::GRS,
+            8 => NmeaOutputRateTypes::GST,
+            9 => NmeaOutputRateTypes::GNS,
+            _ => return Err(ParseError::ParsingError("invalid type value")),
+        };
+
+        let output_rate = it
+            .next()
+            .ok_or(ParseError::ParsingError("output_rate not found"))?;
+        let output_rate: u8 = output_rate
+            .parse()
+            .map_err(|_| ParseError::ParsingError("invalid output_rate"))?;
+
+        Ok(PairCommonSetNmeaOutputRate {
+            _type: nmea_type_enum,
+            output_rate: output_rate,
+        })
+    }
+
+    pub fn to_fields(&self) -> String {
+        format!(
+            "PAIR062,{},{}",
+            self._type.clone() as u8,
+            self.output_rate.clone() as u8,
+        )
+    }
+}
+#[derive(Debug, Clone)]
+pub enum NmeaOutputRateTypes {
+    GGA = 0,
+    GLL = 1,
+    GSA = 2,
+    GSV = 3,
+    RMC = 4,
+    VTG = 5,
+    ZDA = 6,
+    GRS = 7,
+    GST = 8,
+    GNS = 9,
 }

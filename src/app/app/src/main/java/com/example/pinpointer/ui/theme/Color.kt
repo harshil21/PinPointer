@@ -1,0 +1,88 @@
+package com.example.pinpointer.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+// ── Light scheme ──────────────────────────────────────────────────────────────
+val md_light_primary = Color(0xFF006780)
+val md_light_onPrimary = Color(0xFFFFFFFF)
+val md_light_primaryContainer = Color(0xFFB8EAFF)
+val md_light_onPrimaryContainer = Color(0xFF001F28)
+val md_light_secondary = Color(0xFF4D6369)
+val md_light_onSecondary = Color(0xFFFFFFFF)
+val md_light_secondaryContainer = Color(0xFFD0E8EF)
+val md_light_onSecondaryContainer = Color(0xFF081E24)
+val md_light_tertiary = Color(0xFF5C5C7E)
+val md_light_onTertiary = Color(0xFFFFFFFF)
+val md_light_tertiaryContainer = Color(0xFFE2DFFF)
+val md_light_onTertiaryContainer = Color(0xFF181837)
+val md_light_error = Color(0xFFBA1A1A)
+val md_light_onError = Color(0xFFFFFFFF)
+val md_light_errorContainer = Color(0xFFFFDAD6)
+val md_light_onErrorContainer = Color(0xFF410002)
+val md_light_background = Color(0xFFF5FAFB)
+val md_light_onBackground = Color(0xFF171C1E)
+val md_light_surface = Color(0xFFF5FAFB)
+val md_light_onSurface = Color(0xFF171C1E)
+val md_light_surfaceVariant = Color(0xFFDBE4E7)
+val md_light_onSurfaceVariant = Color(0xFF3F484B)
+val md_light_outline = Color(0xFF6F797B)
+val md_light_outlineVariant = Color(0xFFBFC8CB)
+val md_light_surfaceContainerLowest = Color(0xFFFFFFFF)
+val md_light_surfaceContainerLow = Color(0xFFEFF4F5)
+val md_light_surfaceContainer = Color(0xFFE9EFF0)
+val md_light_surfaceContainerHigh = Color(0xFFE3E9EA)
+val md_light_surfaceContainerHighest = Color(0xFFDDE3E5)
+val md_light_inverseSurface = Color(0xFF2B3133)
+val md_light_inverseOnSurface = Color(0xFFECF2F3)
+val md_light_inversePrimary = Color(0xFF5DD5F0)
+val md_light_scrim = Color(0xFF000000)
+
+// ── Dark scheme ───────────────────────────────────────────────────────────────
+val md_dark_primary = Color(0xFF5DD5F0)
+val md_dark_onPrimary = Color(0xFF00363F)
+val md_dark_primaryContainer = Color(0xFF004D5B)
+val md_dark_onPrimaryContainer = Color(0xFFB8EAFF)
+val md_dark_secondary = Color(0xFFB4CDD4)
+val md_dark_onSecondary = Color(0xFF1E3438)
+val md_dark_secondaryContainer = Color(0xFF354A4F)
+val md_dark_onSecondaryContainer = Color(0xFFD0E8EF)
+val md_dark_tertiary = Color(0xFFC5C3EA)
+val md_dark_onTertiary = Color(0xFF2D2D4D)
+val md_dark_tertiaryContainer = Color(0xFF444465)
+val md_dark_onTertiaryContainer = Color(0xFFE2DFFF)
+val md_dark_error = Color(0xFFFFB4AB)
+val md_dark_onError = Color(0xFF690005)
+val md_dark_errorContainer = Color(0xFF93000A)
+val md_dark_onErrorContainer = Color(0xFFFFDAD6)
+val md_dark_background = Color(0xFF0F1416)
+val md_dark_onBackground = Color(0xFFDDE3E5)
+val md_dark_surface = Color(0xFF0F1416)
+val md_dark_onSurface = Color(0xFFDDE3E5)
+val md_dark_surfaceVariant = Color(0xFF3F484B)
+val md_dark_onSurfaceVariant = Color(0xFFBFC8CB)
+val md_dark_outline = Color(0xFF899294)
+val md_dark_outlineVariant = Color(0xFF3F484B)
+val md_dark_surfaceContainerLowest = Color(0xFF0A0E10)
+val md_dark_surfaceContainerLow = Color(0xFF171C1E)
+val md_dark_surfaceContainer = Color(0xFF1B2022)
+val md_dark_surfaceContainerHigh = Color(0xFF262B2D)
+val md_dark_surfaceContainerHighest = Color(0xFF313638)
+val md_dark_inverseSurface = Color(0xFFDDE3E5)
+val md_dark_inverseOnSurface = Color(0xFF2B3133)
+val md_dark_inversePrimary = Color(0xFF006780)
+val md_dark_scrim = Color(0xFF000000)
+
+// ── Flight state indicator colors ─────────────────────────────────────────────
+val FlightStateStandby = Color(0xFF78909C)   // Blue-grey
+val FlightStateMotorBurn = Color(0xFFFF6D00) // Deep orange
+val FlightStateCoast = Color(0xFF0091EA)     // Light blue
+val FlightStateFreefall = Color(0xFFD50000)  // Red
+val FlightStateLanded = Color(0xFF00C853)    // Green
+
+// ── Radar / aiming display colors (always dark context) ───────────────────────
+val RadarBackground = Color(0xFF060D14)
+val RadarGrid = Color(0xFF4DD9E7)
+val RadarCenterRing = Color(0xFF5DD5F0)
+val DotGood = Color(0xFF4CAF50)
+val DotOk = Color(0xFFFFB300)
+val DotBad = Color(0xFFF44336)

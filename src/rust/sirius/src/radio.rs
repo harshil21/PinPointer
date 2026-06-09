@@ -38,8 +38,8 @@ use std::time::{Duration, Instant};
 use rfm95::{Bandwidth, LoraConfig, Rfm95, Rfm95Error, SpreadingFactor};
 
 use protocol::{
-    DOWNLINK_TYPE, DownlinkPacket, FRAG_TYPE, GroundCommand, RtcmFragment, UPLINK_TYPE,
-    UplinkPacket,
+    DOWNLINK_TYPE, DebugDownlinkPacket, DownlinkPacket, FRAG_TYPE, GroundCommand, RtcmFragment,
+    UPLINK_TYPE, UplinkPacket,
 };
 
 use crate::data_processor::FlightData;
@@ -217,6 +217,9 @@ pub fn run_radio_thread(
 ) {
     log::info!("[radio] Thread started");
 
+    // Local debug-mode flag — toggled by EnableDebugTelemetry / DisableDebugTelemetry.
+    let debug_mode = Arc::new(AtomicBool::new(false));
+
     // Apply SF7 / BW500 configuration.
     if let Err(e) = radio.configure(&initial_config()) {
         log::error!("[radio] Initial configure failed: {}", e);
@@ -249,19 +252,26 @@ pub fn run_radio_thread(
                 // the same packet.
                 let _ = radio.clear_irq_flags();
 
-                // Record contact and clear any stale contact-lost flag.
-                had_contact = true;
-                last_rx = Some(Instant::now());
-                contact_lost_flag.store(false, Ordering::Relaxed);
-
-                handle_received(
+                // Only count this as ground-station contact if it parses as a
+                // recognised uplink or fragment.  Spurious LoRa packets from
+                // other devices can pass CRC and arrive here; treating them as
+                // contact would start the CONTACT_LOST_TIMEOUT countdown and
+                // trigger the emergency buzzer 5 s later.
+                let valid_contact = handle_received(
                     &pkt.payload,
                     &rtk_tx,
                     &rx_log_tx,
                     &emergency_flag,
                     &deploy_flag,
+                    &debug_mode,
                     &mut assembler,
                 );
+
+                if valid_contact {
+                    had_contact = true;
+                    last_rx = Some(Instant::now());
+                    contact_lost_flag.store(false, Ordering::Relaxed);
+                }
             }
 
             Ok(None) => {
@@ -289,6 +299,15 @@ pub fn run_radio_thread(
         // ── 3. Periodic downlink TX ───────────────────────────────────────────
         if last_tx.elapsed() >= TX_INTERVAL {
             transmit_downlink(&mut radio, &flight_data, &mut tx_sequence, &tx_log_tx, boot);
+            // If debug mode is active, follow up with the debug packet.
+            if debug_mode.load(Ordering::Relaxed) {
+                transmit_debug(
+                    &mut radio,
+                    &flight_data,
+                    tx_sequence.wrapping_sub(1),
+                    &tx_log_tx,
+                );
+            }
             last_tx = Instant::now();
         }
 
@@ -308,16 +327,21 @@ pub fn run_radio_thread(
 
 // ── Received packet handler ───────────────────────────────────────────────────
 
+/// Process a received payload and return `true` if it was a valid, recognised
+/// ground-station packet (uplink command or RTCM fragment).  Returns `false`
+/// for unknown/reflected/unparseable payloads so that spurious radio noise
+/// does not start the contact-lost countdown.
 fn handle_received(
     payload: &[u8],
     rtk_tx: &mpsc::Sender<Vec<u8>>,
     rx_log_tx: &mpsc::Sender<Vec<u8>>,
     emergency_flag: &Arc<AtomicBool>,
     deploy_flag: &Arc<AtomicBool>,
+    debug_mode: &Arc<AtomicBool>,
     assembler: &mut FragmentAssembler,
-) {
+) -> bool {
     if payload.is_empty() {
-        return;
+        return false;
     }
 
     match payload[0] {
@@ -356,10 +380,21 @@ fn handle_received(
                             log::warn!("[radio] DeployEjectionCharge command received!");
                             deploy_flag.store(true, Ordering::Relaxed);
                         }
+
+                        GroundCommand::EnableDebugTelemetry => {
+                            log::info!("[radio] Debug telemetry ENABLED");
+                            debug_mode.store(true, Ordering::Relaxed);
+                        }
+
+                        GroundCommand::DisableDebugTelemetry => {
+                            log::info!("[radio] Debug telemetry DISABLED");
+                            debug_mode.store(false, Ordering::Relaxed);
+                        }
                     }
 
                     // Log the raw bytes.
                     let _ = rx_log_tx.send(payload.to_vec());
+                    return true;
                 }
 
                 None => {
@@ -383,6 +418,7 @@ fn handle_received(
                     if is_last {
                         let _ = rx_log_tx.send(payload.to_vec());
                     }
+                    return true;
                 }
 
                 None => {
@@ -405,9 +441,41 @@ fn handle_received(
             );
         }
     }
+    false
 }
 
-// ── Downlink transmitter ──────────────────────────────────────────────────────
+// ── Debug downlink transmitter ───────────────────────────────────────────────
+
+fn transmit_debug(
+    radio: &mut Rfm95,
+    flight_data: &Arc<Mutex<FlightData>>,
+    seq: u16,
+    tx_log_tx: &mpsc::Sender<Vec<u8>>,
+) {
+    let bytes = {
+        let data = flight_data.lock().unwrap();
+        DebugDownlinkPacket {
+            sequence_num: seq,
+            gps: data.gps_snr_gps,
+            glonass: data.gps_snr_glonass,
+            galileo: data.gps_snr_galileo,
+            beidou: data.gps_snr_beidou,
+            qzss: data.gps_snr_qzss,
+        }
+        .serialize()
+        .to_vec()
+    };
+    match radio.transmit(&bytes) {
+        Ok(()) => {
+            log::debug!("[radio] Debug TX {} bytes (seq={})", bytes.len(), seq);
+            let _ = tx_log_tx.send(bytes);
+        }
+        Err(e) => log::warn!("[radio] Debug TX error: {}", e),
+    }
+    if let Err(e) = radio.start_receive_continuous() {
+        log::warn!("[radio] RX restart after debug TX: {}", e);
+    }
+}
 
 fn transmit_downlink(
     radio: &mut Rfm95,
@@ -436,6 +504,7 @@ fn transmit_downlink(
             pyro_deployed: data.pyro_deployed,
             pyro_continuity: data.pyro_continuity,
             flight_state: data.flight_state.as_u8(),
+            gps_snr: data.gps_snr,
         }
         .serialize()
         .to_vec()

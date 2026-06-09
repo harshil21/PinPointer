@@ -44,10 +44,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use time::{OffsetDateTime, UtcOffset};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
+use chrono;
 use gpio_cdev::{Chip, LineRequestFlags};
 
 use firm_rust::FIRMClient;
@@ -88,12 +88,19 @@ fn main() -> anyhow::Result<()> {
 
     let boot = Instant::now();
 
-    let dt = OffsetDateTime::now_utc();
-    let local = dt.to_offset(UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC));
+    // Wait for NTP sync before generating the timestamp-based log filename.
+    // The Pi has no RTC, so on boot it restores the fake-hwclock time (typically
+    // the previous shutdown time). NTP corrects it shortly after, but
+    // chrono::Local::now() called before that sync completes stamps the file
+    // with yesterday's (or older) date.
+    if wait_for_ntp_sync(Duration::from_secs(30)) {
+        log::info!("Clock NTP-synchronized — using current time for log filename");
+    } else {
+        log::warn!("NTP sync timed out after 30 s — log filename may use an incorrect timestamp");
+    }
 
-    let fmt = time::format_description::parse("[hour]_[minute]_[second]").unwrap();
-    let hh_mm_ss = local.format(&fmt).unwrap();
-    let log_path = format!("logs/sirius_log_{}.csv", hh_mm_ss);
+    let dt = chrono::Local::now().format("%y%m%d_%H%M%S").to_string();
+    let log_path = format!("/home/harshil/PinPointer/logs/sirius_{}.csv", dt);
 
     log::info!("╔══════════════════════════════════════╗");
     log::info!("║   Sirius Flight Computer — Startup   ║");
@@ -216,18 +223,26 @@ fn main() -> anyhow::Result<()> {
     let mut processor = DataProcessor::new();
     let mut flight_data = FlightData::default();
 
-    // Most-recently observed TX / RX packet bytes (hex-encoded for the CSV).
-    let mut last_tx_hex = String::new();
+    // Most-recently observed RX packet bytes (hex-encoded for the CSV).
     let mut last_rx_hex = String::new();
+
+    // Rate-limit the per-constellation SNR info log to once per second.
+    let mut last_snr_log = Instant::now()
+        .checked_sub(Duration::from_secs(2))
+        .unwrap_or_else(Instant::now);
 
     // ── Main loop ─────────────────────────────────────────────────────────────
     loop {
-        // ── 1. FIRM data ──────────────────────────────────────────────────────
+        // ── 1. FIRM data ─────────────────────────────────────────────────────────────────
         // get_data_packets blocks up to 10 ms waiting for at least one packet,
         // which naturally throttles the loop to the IMU output rate (~100 Hz).
+        let mut had_new_data = false;
         let state_changed = if let Some(client) = firm_client.as_mut() {
             match client.get_data_packets(Some(Duration::from_millis(10))) {
-                Ok(pkts) if !pkts.is_empty() => processor.update(&pkts, &mut flight_data),
+                Ok(pkts) if !pkts.is_empty() => {
+                    had_new_data = true;
+                    processor.update(&pkts, &mut flight_data)
+                }
                 _ => false,
             }
         } else {
@@ -235,17 +250,45 @@ fn main() -> anyhow::Result<()> {
             false
         };
 
-        // ── 2. GPS data (non-blocking drain) ─────────────────────────────────
+        // ── 2. GPS data (non-blocking drain) ─────────────────────────────────────
         if let Some(gps_port) = gps.as_mut() {
             while let Some(msg) = gps_port.try_get_gps_data() {
-                log::info!("GPS message: {:?}", msg);
-                if let WireMessage::NmeaGga(gga) = msg {
-                    flight_data.gps_lat = gga.latitude;
-                    flight_data.gps_lon = gga.longitude;
-                    flight_data.gps_alt_m = gga.altitude_m;
-                    flight_data.rtk_fix = gga_fix_to_rtk(gga.fix_quality);
-                    flight_data.hdop = gga.hdop;
-                    flight_data.satellites_used = gga.satellites_used;
+                match msg {
+                    WireMessage::NmeaGga(gga) => {
+                        log::debug!(
+                            "GGA fix={:?} sats={} lat={:.6} lon={:.6}",
+                            gga.fix_quality,
+                            gga.satellites_used,
+                            gga.latitude,
+                            gga.longitude
+                        );
+                        flight_data.gps_lat = gga.latitude;
+                        flight_data.gps_lon = gga.longitude;
+                        flight_data.gps_alt_m = gga.altitude_m;
+                        flight_data.rtk_fix = gga_fix_to_rtk(gga.fix_quality);
+                        flight_data.hdop = gga.hdop;
+                        flight_data.satellites_used = gga.satellites_used;
+                        had_new_data = true;
+                    }
+                    WireMessage::NmeaGsv(gsv) => {
+                        // Always update the overall average.
+                        flight_data.gps_snr = gsv.avg_snr();
+                        // Update per-constellation field when SNR is non-zero.
+                        let avg = gsv.avg_snr();
+                        if avg > 0 {
+                            use rtk::GsvConstellation::*;
+                            match gsv.constellation {
+                                Gps => flight_data.gps_snr_gps = avg,
+                                Glonass => flight_data.gps_snr_glonass = avg,
+                                Galileo => flight_data.gps_snr_galileo = avg,
+                                BeiDou => flight_data.gps_snr_beidou = avg,
+                                Qzss => flight_data.gps_snr_qzss = avg,
+                                _ => {}
+                            }
+                        }
+                        had_new_data = true;
+                    }
+                    _ => {}
                 }
             }
         }
@@ -284,26 +327,48 @@ fn main() -> anyhow::Result<()> {
         // This clone is the only lock in the hot path and is held for < 1 µs.
         *radio_flight_data.lock().unwrap() = flight_data.clone();
 
-        // ── 7. Buzzer pattern ─────────────────────────────────────────────────
+        // ── 7. Buzzer pattern ─────────────────────────────────────────────
         let emergency = emergency_flag.load(Ordering::Relaxed);
         let contact_lost = contact_lost_flag.load(Ordering::Relaxed);
-        update_buzzer(&flight_data, emergency || contact_lost, &buzzer);
+        update_buzzer(&flight_data, emergency, contact_lost, &buzzer);
 
-        // ── 8. Drain radio log bytes (non-blocking) ───────────────────────────
-        if let Ok(tx) = tx_log_rx.try_recv() {
-            last_tx_hex = bytes_to_hex(&tx);
-        }
+        // ── 8. Drain radio log bytes (non-blocking) ────────────────────────────────────
+        // TX bytes are still drained so the channel never backs up, but the
+        // CSV log no longer mirrors them — we already write the same
+        // information from the structured fields on every row.
+        while tx_log_rx.try_recv().is_ok() {}
         if let Ok(rx) = rx_log_rx.try_recv() {
             last_rx_hex = bytes_to_hex(&rx);
+            had_new_data = true;
         }
 
-        // ── 9. CSV log (one row per loop iteration) ───────────────────────────
-        logger.log(build_log_entry(
-            &flight_data,
-            boot,
-            &last_tx_hex,
-            &last_rx_hex,
-        ));
+        // ── 9. CSV log — only write when new data arrived ─────────────────────────────
+        if had_new_data {
+            logger.log(build_log_entry(&flight_data, &last_rx_hex));
+        }
+
+        // ── 10. Per-constellation SNR info log (once per second when any data) ─
+        if last_snr_log.elapsed() >= Duration::from_secs(1) {
+            let snrs = [
+                flight_data.gps_snr_gps,
+                flight_data.gps_snr_glonass,
+                flight_data.gps_snr_galileo,
+                flight_data.gps_snr_beidou,
+                flight_data.gps_snr_qzss,
+            ];
+            if snrs.iter().any(|&v| v > 0) {
+                log::info!(
+                    "GPS SNR (dB-Hz) — avg={} GPS={} GL={} GA={} GB={} GQ={}",
+                    flight_data.gps_snr,
+                    flight_data.gps_snr_gps,
+                    flight_data.gps_snr_glonass,
+                    flight_data.gps_snr_galileo,
+                    flight_data.gps_snr_beidou,
+                    flight_data.gps_snr_qzss,
+                );
+            }
+            last_snr_log = Instant::now();
+        }
     }
 
     // Unreachable in normal operation; lets Drop run on Ctrl-C / SIGTERM.
@@ -352,8 +417,13 @@ fn fire_pyro(pin: &gpio_cdev::LineHandle, data: &mut FlightData, freefall_trigge
 /// Derive the appropriate [`BuzzerPattern`] from the current flight state and
 /// update the controller only when the pattern changes (to avoid resetting a
 /// mid-sequence on every loop iteration).
-fn update_buzzer(data: &FlightData, emergency: bool, buzzer: &BuzzerController) {
-    let desired = if emergency {
+fn update_buzzer(
+    data: &FlightData,
+    emergency: bool,
+    contact_lost: bool,
+    buzzer: &BuzzerController,
+) {
+    let desired = if emergency || contact_lost {
         // Emergency takes priority over everything — continuous loud tone.
         BuzzerPattern::Emergency
     } else if data.flight_state == FlightState::Landed {
@@ -372,6 +442,14 @@ fn update_buzzer(data: &FlightData, emergency: bool, buzzer: &BuzzerController) 
     };
 
     if buzzer.get_pattern() != desired {
+        if desired == BuzzerPattern::Emergency {
+            let reason = if emergency {
+                "EmergencyLocate command from ground station"
+            } else {
+                "contact lost (no valid uplink within timeout)"
+            };
+            log::info!("Buzzer → CONTINUOUS EMERGENCY tone ({})", reason);
+        }
         buzzer.set_pattern(desired);
     }
 }
@@ -396,4 +474,29 @@ fn gga_fix_to_rtk(fix: GpsFixQuality) -> RtkFixType {
 /// Encode a byte slice as a lower-case hex string for the CSV log.
 fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// Block until systemd-timesyncd reports the clock is NTP-synchronized, or
+/// until `timeout` elapses. Returns `true` if the clock synced in time.
+///
+/// The Pi has no RTC, so at boot the system time is whatever fake-hwclock last
+/// saved. NTP corrects it within seconds of getting network, but we must not
+/// generate the log filename until after that correction.
+fn wait_for_ntp_sync(timeout: Duration) -> bool {
+    use std::process::Command;
+    let deadline = Instant::now() + timeout;
+    loop {
+        let synced = Command::new("timedatectl")
+            .args(["show", "--property=NTPSynchronized", "--value"])
+            .output()
+            .map(|o| o.stdout.starts_with(b"yes"))
+            .unwrap_or(false);
+        if synced {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(500));
+    }
 }

@@ -53,14 +53,17 @@ impl Rfm95 {
         spi.configure(&opts)?;
 
         let mut chip = Chip::new(&pin_config.gpio_chip)?;
-        let reset_line = chip
-            .get_line(pin_config.reset_pin)?
-            .request(LineRequestFlags::OUTPUT, 1, "rfm95-reset")?;
+        let reset_line = chip.get_line(pin_config.reset_pin)?.request(
+            LineRequestFlags::OUTPUT,
+            1,
+            "rfm95-reset",
+        )?;
         let dio0_line = match pin_config.dio0_pin {
-            Some(pin) => Some(
-                chip.get_line(pin)?
-                    .request(LineRequestFlags::INPUT, 0, "rfm95-dio0")?,
-            ),
+            Some(pin) => Some(chip.get_line(pin)?.request(
+                LineRequestFlags::INPUT,
+                0,
+                "rfm95-dio0",
+            )?),
             None => None,
         };
 
@@ -213,13 +216,24 @@ impl Rfm95 {
 
         // ModemConfig2: SF | CRC
         let mc2 = ((config.spreading_factor as u8) << 4)
-            | if config.crc_enabled { MODEM_CONFIG2_RX_PAYLOAD_CRC_ON } else { 0 };
+            | if config.crc_enabled {
+                MODEM_CONFIG2_RX_PAYLOAD_CRC_ON
+            } else {
+                0
+            };
         self.write_register(Register::ModemConfig2, mc2)?;
 
         // ModemConfig3: LDR optimize | AGC
         let ldro = config.should_use_low_data_rate_optimize();
-        let mc3 = if ldro { MODEM_CONFIG3_LOW_DATA_RATE_OPTIMIZE } else { 0 }
-            | if config.agc_auto_on { MODEM_CONFIG3_AGC_AUTO_ON } else { 0 };
+        let mc3 = if ldro {
+            MODEM_CONFIG3_LOW_DATA_RATE_OPTIMIZE
+        } else {
+            0
+        } | if config.agc_auto_on {
+            MODEM_CONFIG3_AGC_AUTO_ON
+        } else {
+            0
+        };
         self.write_register(Register::ModemConfig3, mc3)?;
 
         // SF6 special registers
@@ -228,7 +242,10 @@ impl Rfm95 {
             self.write_register(Register::DetectionThreshold, DETECTION_THRESHOLD_SF6)?;
         } else {
             self.write_register(Register::DetectOptimize, DETECT_OPTIMIZE_SF7_TO_SF12)?;
-            self.write_register(Register::DetectionThreshold, DETECTION_THRESHOLD_SF7_TO_SF12)?;
+            self.write_register(
+                Register::DetectionThreshold,
+                DETECTION_THRESHOLD_SF7_TO_SF12,
+            )?;
         }
 
         self.write_register(Register::PreambleMsb, (config.preamble_length >> 8) as u8)?;
@@ -247,13 +264,19 @@ impl Rfm95 {
         }
 
         if config.header_mode == HeaderMode::Implicit {
-            self.write_register(Register::PayloadLength, config.implicit_header_payload_length)?;
+            self.write_register(
+                Register::PayloadLength,
+                config.implicit_header_payload_length,
+            )?;
         }
         self.write_register(Register::MaxPayloadLength, 255)?;
 
         log::info!(
             "RFM95 configured: freq={}Hz, bw={:?}, sf={:?}, cr={:?}",
-            config.frequency, config.bandwidth, config.spreading_factor, config.coding_rate,
+            config.frequency,
+            config.bandwidth,
+            config.spreading_factor,
+            config.coding_rate,
         );
         Ok(())
     }
@@ -422,7 +445,12 @@ impl Rfm95 {
         let snr = self.get_packet_snr()?;
         let rssi = self.get_packet_rssi(snr)?;
         self.write_register(Register::IrqFlags, 0xFF)?;
-        log::debug!("RX: {} bytes, RSSI={} dBm, SNR={:.1} dB", payload.len(), rssi, snr);
+        log::debug!(
+            "RX: {} bytes, RSSI={} dBm, SNR={:.1} dB",
+            payload.len(),
+            rssi,
+            snr
+        );
         Ok(ReceivedPacket { payload, rssi, snr })
     }
 
@@ -431,7 +459,11 @@ impl Rfm95 {
     /// Current RSSI in dBm (while in receive mode).
     pub fn get_rssi(&mut self) -> Result<i16> {
         let raw = self.read_register(Register::RssiValue)?;
-        let offset: i16 = if self.config.frequency < 779_000_000 { -164 } else { -157 };
+        let offset: i16 = if self.config.frequency < 779_000_000 {
+            -164
+        } else {
+            -157
+        };
         Ok(raw as i16 + offset)
     }
 
@@ -444,7 +476,11 @@ impl Rfm95 {
     /// RSSI of the last received packet (dBm).
     pub fn get_packet_rssi(&mut self, snr: f32) -> Result<i16> {
         let raw = self.read_register(Register::PktRssiValue)?;
-        let offset: i16 = if self.config.frequency < 779_000_000 { -164 } else { -157 };
+        let offset: i16 = if self.config.frequency < 779_000_000 {
+            -164
+        } else {
+            -157
+        };
         let rssi = if snr >= 0.0 {
             offset + (raw as f32 * 16.0 / 15.0) as i16
         } else {
@@ -482,7 +518,9 @@ impl Rfm95 {
 
     /// Read current interrupt flags.
     pub fn get_irq_flags(&mut self) -> Result<IrqFlags> {
-        Ok(IrqFlags::from_bits_truncate(self.read_register(Register::IrqFlags)?))
+        Ok(IrqFlags::from_bits_truncate(
+            self.read_register(Register::IrqFlags)?,
+        ))
     }
 
     /// Clear all interrupt flags.

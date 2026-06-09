@@ -6,3 +6,4 @@ description = "LC29H general purpose code"
 
 [dependencies]
 serialport = { version = "4.7.3", default-features = false }
+log = "0.4"

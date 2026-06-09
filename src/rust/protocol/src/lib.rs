@@ -57,6 +57,9 @@
 pub const DOWNLINK_TYPE: u8 = 0x01;
 pub const UPLINK_TYPE: u8 = 0x02;
 pub const FRAG_TYPE: u8 = 0x03;
+/// Debug telemetry packet (Rocket → Ground).  Only transmitted when the
+/// ground station has activated debug mode via [`GroundCommand::EnableDebugTelemetry`].
+pub const DEBUG_TYPE: u8 = 0x04;
 
 /// Maximum RTCM data bytes in a single non-fragmented uplink
 /// (255 total − 3 header bytes).
@@ -148,6 +151,10 @@ pub enum GroundCommand {
     DeployEjectionCharge = 2,
     /// Deactivate the emergency locator buzzer on the rocket.
     EmergencyLocateOff = 3,
+    /// Ask the rocket to send per-constellation GPS SNR debug packets.
+    EnableDebugTelemetry = 4,
+    /// Stop sending debug packets.
+    DisableDebugTelemetry = 5,
 }
 
 impl GroundCommand {
@@ -157,6 +164,8 @@ impl GroundCommand {
             1 => GroundCommand::EmergencyLocate,
             2 => GroundCommand::DeployEjectionCharge,
             3 => GroundCommand::EmergencyLocateOff,
+            4 => GroundCommand::EnableDebugTelemetry,
+            5 => GroundCommand::DisableDebugTelemetry,
             _ => GroundCommand::None,
         }
     }
@@ -174,6 +183,8 @@ impl core::fmt::Display for GroundCommand {
             GroundCommand::EmergencyLocate => f.write_str("EmergencyLocate"),
             GroundCommand::DeployEjectionCharge => f.write_str("DeployEjectionCharge"),
             GroundCommand::EmergencyLocateOff => f.write_str("EmergencyLocateOff"),
+            GroundCommand::EnableDebugTelemetry => f.write_str("EnableDebugTelemetry"),
+            GroundCommand::DisableDebugTelemetry => f.write_str("DisableDebugTelemetry"),
         }
     }
 }
@@ -212,11 +223,14 @@ pub struct DownlinkPacket {
     /// Current flight state (0 = Standby, 1 = MotorBurn, 2 = Coast,
     /// 3 = Freefall, 4 = Landed).
     pub flight_state: u8,
+    /// Average GPS signal-to-noise ratio across all tracked satellites (dB-Hz).
+    /// Computed from NMEA GSV sentences. Zero if no GSV data available.
+    pub gps_snr: u8,
 }
 
 impl DownlinkPacket {
     /// Wire size of a serialised downlink packet (bytes).
-    pub const SIZE: usize = 43;
+    pub const SIZE: usize = 44;
 
     /// Serialise to a fixed-size byte array.
     pub fn serialize(&self) -> [u8; Self::SIZE] {
@@ -234,6 +248,7 @@ impl DownlinkPacket {
         b[40] = self.pyro_deployed as u8;
         b[41] = self.pyro_continuity as u8;
         b[42] = self.flight_state;
+        b[43] = self.gps_snr;
         b
     }
 
@@ -262,13 +277,67 @@ impl DownlinkPacket {
             pyro_deployed: bytes[40] != 0,
             pyro_continuity: bytes[41] != 0,
             flight_state: bytes[42],
+            gps_snr: bytes[43],
         })
     }
 }
 
-// ── UplinkPacket ──────────────────────────────────────────────────────────────
+// ── DebugDownlinkPacket ────────────────────────────────────────────────────────
 
-/// Packet sent from the ground station to the rocket.
+/// Per-constellation GPS SNR debug packet, sent by the rocket only while
+/// [`GroundCommand::EnableDebugTelemetry`] is active.
+///
+/// # Wire layout (8 bytes, fixed)
+/// ```text
+///  [0]    type     u8 = 0x04
+///  [1-2]  seq_num  u16  (matches the concurrent DownlinkPacket sequence)
+///  [3]    gps      u8   GPS / NAVSTAR average SNR (dB-Hz)
+///  [4]    glonass  u8   GLONASS
+///  [5]    galileo  u8   Galileo
+///  [6]    beidou   u8   BeiDou
+///  [7]    qzss     u8   QZSS
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct DebugDownlinkPacket {
+    pub sequence_num: u16,
+    pub gps: u8,
+    pub glonass: u8,
+    pub galileo: u8,
+    pub beidou: u8,
+    pub qzss: u8,
+}
+
+impl DebugDownlinkPacket {
+    pub const SIZE: usize = 8;
+
+    pub fn serialize(&self) -> [u8; Self::SIZE] {
+        let mut b = [0u8; Self::SIZE];
+        b[0] = DEBUG_TYPE;
+        b[1..3].copy_from_slice(&self.sequence_num.to_le_bytes());
+        b[3] = self.gps;
+        b[4] = self.glonass;
+        b[5] = self.galileo;
+        b[6] = self.beidou;
+        b[7] = self.qzss;
+        b
+    }
+
+    pub fn deserialize(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < Self::SIZE || bytes[0] != DEBUG_TYPE {
+            return None;
+        }
+        Some(DebugDownlinkPacket {
+            sequence_num: u16::from_le_bytes([bytes[1], bytes[2]]),
+            gps: bytes[3],
+            glonass: bytes[4],
+            galileo: bytes[5],
+            beidou: bytes[6],
+            qzss: bytes[7],
+        })
+    }
+}
+
+// ── UplinkPacket ────────────────────────────────────────────────────────────
 ///
 /// Carries an optional [`GroundCommand`] and/or a small inline RTCM correction
 /// payload.  When the RTCM data for a single epoch is larger than
@@ -408,9 +477,50 @@ mod tests {
 
     #[test]
     fn ground_command_roundtrip() {
-        for v in 0u8..=2 {
+        for v in 0u8..=5 {
             assert_eq!(GroundCommand::from_u8(v).as_u8(), v);
         }
+    }
+
+    #[test]
+    fn debug_downlink_roundtrip() {
+        let pkt = DebugDownlinkPacket {
+            sequence_num: 0x1234,
+            gps: 42,
+            glonass: 35,
+            galileo: 38,
+            beidou: 30,
+            qzss: 25,
+        };
+        let bytes = pkt.serialize();
+        assert_eq!(bytes[0], DEBUG_TYPE);
+        let dec = DebugDownlinkPacket::deserialize(&bytes).expect("deserialise");
+        assert_eq!(dec.sequence_num, 0x1234);
+        assert_eq!(dec.gps, 42);
+        assert_eq!(dec.glonass, 35);
+        assert_eq!(dec.galileo, 38);
+        assert_eq!(dec.beidou, 30);
+        assert_eq!(dec.qzss, 25);
+    }
+
+    #[test]
+    fn debug_downlink_rejects_wrong_type() {
+        let bytes = [0xFF; DebugDownlinkPacket::SIZE];
+        assert!(DebugDownlinkPacket::deserialize(&bytes).is_none());
+    }
+
+    #[test]
+    fn ground_command_debug_telemetry() {
+        assert_eq!(
+            GroundCommand::from_u8(4),
+            GroundCommand::EnableDebugTelemetry
+        );
+        assert_eq!(
+            GroundCommand::from_u8(5),
+            GroundCommand::DisableDebugTelemetry
+        );
+        assert_eq!(GroundCommand::EnableDebugTelemetry.as_u8(), 4);
+        assert_eq!(GroundCommand::DisableDebugTelemetry.as_u8(), 5);
     }
 
     #[test]
@@ -435,6 +545,7 @@ mod tests {
             pyro_deployed: false,
             pyro_continuity: true,
             flight_state: 3,
+            gps_snr: 0,
         };
         let bytes = pkt.serialize();
         assert_eq!(bytes.len(), DownlinkPacket::SIZE);
@@ -456,6 +567,7 @@ mod tests {
             pyro_deployed: true,
             pyro_continuity: false,
             flight_state: 2,
+            gps_snr: 0,
         };
         let bytes = pkt.serialize();
         let dec = DownlinkPacket::deserialize(&bytes).expect("deserialise failed");
@@ -467,6 +579,7 @@ mod tests {
         assert!(dec.pyro_deployed);
         assert!(!dec.pyro_continuity);
         assert_eq!(dec.flight_state, 2);
+        assert_eq!(dec.gps_snr, 0);
     }
 
     #[test]
@@ -494,6 +607,7 @@ mod tests {
                 pyro_deployed: false,
                 pyro_continuity: false,
                 flight_state: 0,
+                gps_snr: 0,
             };
             let dec = DownlinkPacket::deserialize(&pkt.serialize()).unwrap();
             assert_eq!(
