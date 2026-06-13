@@ -8,7 +8,7 @@
 //! |-------------|-------------|----------------------------------------------------------|
 //! | Standby     | MotorBurn   | altitude > 10 m  AND  raw Z-accel > 20 m/s² (≈ 2.04 g) |
 //! | MotorBurn   | Coast       | current velocity < 98 % of peak velocity seen so far    |
-//! | Coast       | Freefall    | velocity < 0 m/s  AND  altitude < 98 % of peak altitude |
+//! | Coast       | Freefall    | velocity < 0 m/s  OR  altitude < 99 % of peak altitude  |
 //! | Freefall    | Landed      | |Z-accel| spike > 30 m/s² (≈ 3.06 g) — landing impact    |
 //!
 //! `apogee_m` is the maximum altitude recorded during MotorBurn and Coast.
@@ -18,11 +18,10 @@ use firm_core::firm_packets::ProcessedFIRMData;
 // ── Threshold constants ───────────────────────────────────────────────────────
 
 /// Minimum altitude (m AGL) required before launch is declared.
-const LAUNCH_ALT_THRESHOLD_M: f32 = 20.0;
+const LAUNCH_ALT_THRESHOLD_M: f32 = 30.0;
 
 /// Minimum raw Z-acceleration (g) for launch detection.
-/// Derived from 20 m/s² net acceleration: 20 / 9.81 ≈ 2.039 g.
-const LAUNCH_ACCEL_THRESHOLD_G: f32 = 30.0 / 9.81;
+const LAUNCH_ACCEL_THRESHOLD_G: f32 = 20.0 / 9.81;
 
 /// Fraction of peak velocity below which burnout / coast is declared.
 /// Requires peak velocity > MIN_PEAK_VEL_MPS to prevent a false trigger
@@ -34,11 +33,10 @@ const COAST_VEL_FRACTION: f32 = 0.98;
 const MIN_PEAK_VEL_MPS: f32 = 10.0;
 
 /// Fraction of peak altitude below which freefall is declared.
-const FREEFALL_ALT_FRACTION: f32 = 0.98;
+const FREEFALL_ALT_FRACTION: f32 = 0.99;
 
 /// |Z-accel| threshold (g) for landing-impact detection.
-/// Derived from 30 m/s²: 30 / 9.81 ≈ 3.058 g.
-const LANDING_ACCEL_THRESHOLD_G: f32 = 30.0 / 9.81;
+const LANDING_ACCEL_THRESHOLD_G: f32 = 25.0 / 9.81;
 
 // ── FlightState ───────────────────────────────────────────────────────────────
 
@@ -186,7 +184,8 @@ impl StateChecker {
                     self.max_alt_m = alt;
                 }
 
-                if self.time_in_state_s > 6.0 // Motor has 6 second burn time
+                if self.time_in_state_s > 5.0
+                // Motor has 6 second burn time
                 {
                     self.state = FlightState::Coast;
                     self.time_in_state_s = 0.0;
@@ -201,14 +200,15 @@ impl StateChecker {
             }
 
             // ── Coast → Freefall ─────────────────────────────────────────────
-            // Trigger: velocity has gone negative (past apogee) AND altitude has
-            // already dropped a little below the recorded peak.
+            // Trigger: altitude has dropped below 99 % of peak (pressure altitude
+            // is reliable) OR velocity has gone negative (past apogee).
+            // Velocity is noisier, so it is an OR rather than the sole condition.
             FlightState::Coast => {
                 if alt > self.max_alt_m {
                     self.max_alt_m = alt;
                 }
 
-                if alt < FREEFALL_ALT_FRACTION * self.max_alt_m {
+                if alt < FREEFALL_ALT_FRACTION * self.max_alt_m || vel < 0.0 {
                     self.state = FlightState::Freefall;
                     self.time_in_state_s = 0.0;
                     self.state_start_time_s = data.timestamp_seconds;

@@ -81,6 +81,12 @@ const SPI_PATH: &str = "/dev/spidev0.0";
 /// Typical e-matches fire within 1–3 ms; 8 ms gives comfortable margin.
 const PYRO_PULSE_MS: u64 = 8;
 
+/// Number of sequential pulses sent on the freefall/apogee firing event.
+const PYRO_FREEFALL_COUNT: u32 = 3;
+
+/// Delay between consecutive re-fire pulses (ms).
+const PYRO_REFIRE_DELAY_MS: u64 = 10;
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 fn main() -> anyhow::Result<()> {
@@ -307,20 +313,28 @@ fn main() -> anyhow::Result<()> {
 
         // ── 5. Pyro firing ────────────────────────────────────────────────────
         // Fire on:
-        //   a) First transition into Freefall (apogee ejection charge).
-        //   b) Explicit DeployEjectionCharge command from the ground station.
-        // Guard with pyro_deployed so the charge is fired at most once.
-        if !flight_data.pyro_deployed {
-            let freefall_transition =
-                state_changed && flight_data.flight_state == FlightState::Freefall;
-            let ground_command = deploy_flag.load(Ordering::Relaxed);
+        //   a) Transition into Freefall — fires PYRO_FREEFALL_COUNT times with
+        //      PYRO_REFIRE_DELAY_MS between each pulse.
+        //   b) Explicit DeployEjectionCharge command from the ground station —
+        //      fires once unconditionally every time the flag is set.
+        // There is intentionally no single-fire guard; both paths can always fire.
+        let freefall_transition =
+            state_changed && flight_data.flight_state == FlightState::Freefall;
+        let ground_command = deploy_flag.load(Ordering::Relaxed);
 
-            if freefall_transition || ground_command {
-                fire_pyro(&pyro_pin, &mut flight_data, freefall_transition);
-
-                // Acknowledge the ground command so we don't fire again.
-                deploy_flag.store(false, Ordering::Relaxed);
+        if freefall_transition {
+            for i in 0..PYRO_FREEFALL_COUNT {
+                fire_pyro(&pyro_pin, &mut flight_data, "freefall");
+                if i < PYRO_FREEFALL_COUNT - 1 {
+                    thread::sleep(Duration::from_millis(PYRO_REFIRE_DELAY_MS));
+                }
             }
+        }
+
+        if ground_command {
+            fire_pyro(&pyro_pin, &mut flight_data, "ground command");
+            // Clear the flag so we fire exactly once per command, not every loop tick.
+            deploy_flag.store(false, Ordering::Relaxed);
         }
 
         // ── 6. Share latest FlightData with the radio thread ──────────────────
@@ -383,17 +397,16 @@ fn main() -> anyhow::Result<()> {
 // ── Pyro channel ──────────────────────────────────────────────────────────────
 
 /// Fire the ejection charge: drive GPIO 22 HIGH for [`PYRO_PULSE_MS`] ms,
-/// then LOW.  Marks `data.pyro_deployed = true`.
+/// then LOW.  Sets `data.pyro_deployed = true` on first call.
+///
+/// `reason` is a short label (e.g. `"freefall"` or `"ground command"`) used
+/// in the log message.  Call in a loop for multiple pulses; see
+/// [`PYRO_FREEFALL_COUNT`] and [`PYRO_REFIRE_DELAY_MS`].
 ///
 /// Using a timed pulse rather than leaving the pin HIGH is important: it
 /// limits energy delivered and protects against software bugs that would
 /// otherwise hold the channel on indefinitely.
-fn fire_pyro(pin: &gpio_cdev::LineHandle, data: &mut FlightData, freefall_trigger: bool) {
-    let reason = if freefall_trigger {
-        "freefall"
-    } else {
-        "ground command"
-    };
+fn fire_pyro(pin: &gpio_cdev::LineHandle, data: &mut FlightData, reason: &str) {
     log::warn!(
         "*** FIRING PYRO CHANNEL ({}) — alt={:.1} m  vel={:.1} m/s  accel_z={:.2} g ***",
         reason,
