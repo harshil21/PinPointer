@@ -163,8 +163,9 @@ pub const MODEM_CONFIG3_AGC_AUTO_ON: u8 = 0x04;
 
 // ── DetectOptimize / DetectionThreshold ──────────────────────────────
 
-pub const DETECT_OPTIMIZE_SF6: u8 = 0x05;
-pub const DETECT_OPTIMIZE_SF7_TO_SF12: u8 = 0x03;
+/// Bits [7:6] are reserved and must be kept at their POR value (0b11).
+pub const DETECT_OPTIMIZE_SF6: u8 = 0xC5;
+pub const DETECT_OPTIMIZE_SF7_TO_SF12: u8 = 0xC3;
 pub const DETECTION_THRESHOLD_SF6: u8 = 0x0C;
 pub const DETECTION_THRESHOLD_SF7_TO_SF12: u8 = 0x0A;
 

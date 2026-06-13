@@ -196,6 +196,25 @@ impl Rfm95 {
         self.set_mode(OperatingMode::Standby)?;
         self.config = *config;
 
+        // SX1276 §4.1.1: LowFrequencyModeOn (RegOpMode bit 3) must be 0 for
+        // the HF port (frequency > ~600 MHz) and 1 for the LF port.
+        // open() ORs OPMODE_LONG_RANGE_MODE onto the reset value 0x09, which
+        // has bit 3 = 1 (LF mode on by default).  set_mode() only touches
+        // bits [2:0], so this bit stays stuck at 1 for the entire session
+        // unless explicitly corrected here.  Operating at 915 MHz with
+        // LowFrequencyModeOn = 1 uses the wrong internal calibration.
+        {
+            let opmode = self.read_register(Register::OpMode)?;
+            let corrected = if config.frequency > 525_000_000 {
+                opmode & !OPMODE_LOW_FREQUENCY_MODE // HF: clear bit 3
+            } else {
+                opmode | OPMODE_LOW_FREQUENCY_MODE // LF: set bit 3
+            };
+            if corrected != opmode {
+                self.write_register(Register::OpMode, corrected)?;
+            }
+        }
+
         self.set_frequency(config.frequency)?;
         self.set_pa_config(&config.pa_config)?;
         self.set_ocp(120)?;
@@ -213,6 +232,29 @@ impl Rfm95 {
                 0
             };
         self.write_register(Register::ModemConfig1, mc1)?;
+
+        // SX1276 errata 2.1 — Sensitivity optimisation for 500 kHz bandwidth.
+        //
+        // With the default IfFreq1 = 0x20 the chip tunes its IF to ~500 kHz,
+        // placing every received signal at (or beyond) the edge of the baseband
+        // filter.  The resulting attenuation is 20+ dB for *all* signal levels,
+        // not just weak ones — hence the badly low RSSI even at close range.
+        // HighBwOptimize1/2 must also be changed for 500 kHz on the HF port.
+        // For all other bandwidths, restore the reset defaults so that a later
+        // reconfigure to a narrower BW doesn't inherit stale values.
+        //
+        // Reference: Semtech SX1276 errata note, §2.1.
+        if config.bandwidth == Bandwidth::Bw500kHz && config.frequency > 525_000_000 {
+            self.write_register(Register::IfFreq1, 0x00)?;
+            self.write_register(Register::IfFreq2, 0x00)?;
+            self.write_register(Register::HighBwOptimize1, 0x02)?;
+            self.write_register(Register::HighBwOptimize2, 0x64)?;
+        } else {
+            self.write_register(Register::IfFreq1, 0x20)?;
+            self.write_register(Register::IfFreq2, 0x00)?;
+            self.write_register(Register::HighBwOptimize1, 0x03)?;
+            self.write_register(Register::HighBwOptimize2, 0x65)?;
+        }
 
         // ModemConfig2: SF | CRC
         let mc2 = ((config.spreading_factor as u8) << 4)

@@ -148,7 +148,7 @@ impl Default for LoraConfig {
             crc_enabled: true,
             invert_iq: false,
             pa_config: PaConfig::default(),
-            agc_auto_on: true,
+            agc_auto_on: false,
             low_data_rate_optimize: None,
             implicit_header_payload_length: 255,
         }

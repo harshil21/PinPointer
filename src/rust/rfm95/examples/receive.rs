@@ -40,7 +40,7 @@ fn main() -> rfm95::Result<()> {
         coding_rate: CodingRate::Cr4_5,
         pa_config: PaConfig {
             pa_select: PaSelect::PaBoost,
-            output_power: 20,
+            output_power: 17,
         },
         ..LoraConfig::default()
     };

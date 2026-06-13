@@ -38,7 +38,7 @@ fn main() -> rfm95::Result<()> {
         header_mode: rfm95::HeaderMode::Explicit,
         pa_config: PaConfig {
             pa_select: PaSelect::PaBoost,
-            output_power: 20,
+            output_power: 17,
         },
         ..LoraConfig::default()
     };
