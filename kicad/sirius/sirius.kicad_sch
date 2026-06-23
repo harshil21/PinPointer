@@ -8281,12 +8281,12 @@
 		(uuid "ba21f457-79c7-40b9-87ac-2f8a6cd98d3a")
 	)
 	(no_connect
-		(at 314.96 153.67)
-		(uuid "c15590be-aac4-49d8-a318-c07b535a35a5")
-	)
-	(no_connect
 		(at 43.18 173.99)
 		(uuid "cc93b0d6-13f1-4f30-a5ff-a12a744396e4")
+	)
+	(no_connect
+		(at 375.92 153.67)
+		(uuid "e5739ab3-48b1-49bd-b32e-cfc7d1d57244")
 	)
 	(no_connect
 		(at 375.92 171.45)
@@ -9090,16 +9090,6 @@
 	)
 	(wire
 		(pts
-			(xy 394.97 153.67) (xy 375.92 153.67)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "5e111f44-83bc-463d-bf28-5bbd0c1fc5cf")
-	)
-	(wire
-		(pts
 			(xy 181.61 39.37) (xy 181.61 40.64)
 		)
 		(stroke
@@ -9277,6 +9267,16 @@
 			(type default)
 		)
 		(uuid "79333c33-cddc-4041-b582-25e494dab318")
+	)
+	(wire
+		(pts
+			(xy 306.07 153.67) (xy 314.96 153.67)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7b2f6e94-a4e5-4be5-955c-426c577d0d62")
 	)
 	(wire
 		(pts
@@ -10218,6 +10218,16 @@
 		)
 		(uuid "046a1d17-2f49-4c1c-9652-5ab4ad029df2")
 	)
+	(label "RESET"
+		(at 306.07 153.67 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "11a2747f-6ba2-4e2f-a0b7-407899603054")
+	)
 	(label "PPS"
 		(at 222.25 194.31 0)
 		(effects
@@ -10660,16 +10670,6 @@
 			(justify left bottom)
 		)
 		(uuid "fa18af61-91ed-4071-af18-614ee21b8bb9")
-	)
-	(label "RESET"
-		(at 394.97 153.67 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "fa5adb31-56f6-4947-8a62-158d8bd7c6eb")
 	)
 	(symbol
 		(lib_id "sirius:RFM95W-915S2")
@@ -11947,7 +11947,7 @@
 				)
 			)
 		)
-		(property "Digikey PN" ""
+		(property "Digikey PN" "399-C0402C101J5GACTUCT-ND"
 			(at 124.46 217.17 0)
 			(hide yes)
 			(show_name no)
@@ -12016,7 +12016,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.diodes.com/assets/Datasheets/BSS138DWK.pdf"
 			(at 237.49 176.53 0)
 			(hide yes)
 			(show_name no)
@@ -12029,6 +12029,17 @@
 		)
 		(property "Description" "Dual NMOS transistor, 6 pin package"
 			(at 237.49 171.45 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "31-BSS138DWK-13CT-ND"
+			(at 237.49 171.45 90)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12109,7 +12120,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.diodes.com/assets/Datasheets/BSS138DWK.pdf"
 			(at 237.49 157.48 0)
 			(hide yes)
 			(show_name no)
@@ -12131,23 +12142,34 @@
 				)
 			)
 		)
+		(property "Digikey PN" "31-BSS138DWK-13CT-ND"
+			(at 237.49 152.4 90)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "3"
-			(uuid "3e1b0917-6843-48ad-9b32-8400f20f6be9")
+			(uuid "3e1b0917-6843-48ad-9b32-8400f20f6bea")
 		)
 		(pin "6"
-			(uuid "a931412c-f92c-4b08-809b-685935a448ed")
+			(uuid "a931412c-f92c-4b08-809b-685935a448ee")
 		)
 		(pin "1"
-			(uuid "ede3db21-3596-4317-b00c-b7cea98550ba")
+			(uuid "ede3db21-3596-4317-b00c-b7cea98550bb")
 		)
 		(pin "2"
-			(uuid "66147503-30fa-4f78-835d-e1a17a390352")
+			(uuid "66147503-30fa-4f78-835d-e1a17a390353")
 		)
 		(pin "5"
-			(uuid "89957570-db6e-4ae1-9caa-15adde21bd92")
+			(uuid "89957570-db6e-4ae1-9caa-15adde21bd93")
 		)
 		(pin "4"
-			(uuid "a22fe496-7cfd-4811-9e5d-ab6ce633a981")
+			(uuid "a22fe496-7cfd-4811-9e5d-ab6ce633a982")
 		)
 		(instances
 			(project "sirius"
@@ -12574,7 +12596,7 @@
 				)
 			)
 		)
-		(property "Digikey PN" ""
+		(property "Digikey PN" "553-BSCH0010050568NJCPCT-ND"
 			(at 124.46 209.55 0)
 			(hide yes)
 			(show_name no)
@@ -12745,6 +12767,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "P12KDBCT-ND"
+			(at 234.95 137.16 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "7a750db8-db2e-46a7-811b-f0d1402e6872")
 		)
@@ -12816,6 +12849,17 @@
 			)
 		)
 		(property "Description" "Unpolarized capacitor, small symbol"
+			(at 138.43 73.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "587-3258-1-ND"
 			(at 138.43 73.66 0)
 			(hide yes)
 			(show_name no)
@@ -13655,6 +13699,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "311-10.0KHRCT-ND"
+			(at 223.52 149.86 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "1"
 			(uuid "ff963d2f-8a25-4fe6-9eeb-eba5673cbafb")
 		)
@@ -14250,6 +14305,17 @@
 			)
 		)
 		(property "Description" "Resistor, small symbol"
+			(at 224.79 170.18 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Digikey PN" "311-10.0KHRCT-ND"
 			(at 224.79 170.18 0)
 			(hide yes)
 			(show_name no)
@@ -14988,7 +15054,7 @@
 				)
 			)
 		)
-		(property "Digikey PN" ""
+		(property "Digikey PN" "490-GRM188R60J226MEA0JCT-ND"
 			(at 78.74 72.39 90)
 			(hide yes)
 			(show_name no)
@@ -16473,7 +16539,7 @@
 				)
 			)
 		)
-		(property "Digikey PN" ""
+		(property "Digikey PN" "1276-1002-1-ND"
 			(at 137.16 217.17 0)
 			(hide yes)
 			(show_name no)
@@ -17573,7 +17639,7 @@
 				)
 			)
 		)
-		(property "Digikey PN" ""
+		(property "Digikey PN" "490-GRM188R60J226MEA0JCT-ND"
 			(at 87.63 72.39 90)
 			(hide yes)
 			(show_name no)
@@ -18382,7 +18448,7 @@
 				)
 			)
 		)
-		(property "Digikey PN" ""
+		(property "Digikey PN" "399-C0402C101J5GACTUCT-ND"
 			(at 124.46 195.58 0)
 			(hide yes)
 			(show_name no)
@@ -18831,7 +18897,7 @@
 				)
 			)
 		)
-		(property "Digikey PN" ""
+		(property "Digikey PN" "541-10.0LCT-ND"
 			(at 160.02 214.63 90)
 			(hide yes)
 			(show_name no)
@@ -19002,7 +19068,7 @@
 				)
 			)
 		)
-		(property "Digikey PN" ""
+		(property "Digikey PN" "311-0.0JRCT-ND"
 			(at 124.46 185.42 0)
 			(hide yes)
 			(show_name no)
@@ -20312,6 +20378,17 @@
 				)
 			)
 		)
+		(property "Digikey PN" "1276-1168-1-ND"
+			(at 128.27 78.74 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(pin "2"
 			(uuid "58629c75-aa75-485f-919b-94ac2df4f471")
 		)
@@ -20652,7 +20729,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
