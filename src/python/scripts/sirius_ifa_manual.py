@@ -18,7 +18,7 @@ class IFASimulation:
 
     # ── Board & substrate ──────────────────────────────────────────────
     BOARD_WIDTH_MM = 42.12
-    BOARD_LENGTH_MM = 65.54
+    BOARD_LENGTH_MM = 75.54
     BOARD_THICKNESS_MM = 1.6
     SUBSTRATE_EPSR = 4.6
     SUBSTRATE_LOSS_TANGENT = 0.015
@@ -35,7 +35,7 @@ class IFASimulation:
 
     # ── Keepout strip (left edge — no GND copper) ──────────────────────
     KEEPOUT_WIDTH_MM = 13.18
-    TOP_MARGIN_MM = 2.0
+    TOP_MARGIN_MM = 8.0
     BOTTOM_MARGIN_MM = 1.0
 
     # ── Stub dimensions ────────────────────────────────────────────────
@@ -52,7 +52,7 @@ class IFASimulation:
     MEANDER_WIDTH_MM = 6.0  # must be < SC_STUB_LENGTH_MM
     MEANDER_V_GAP_MM = 6.0  # ← MEDIUM FREQUENCY TUNE
     MEANDER_H_GAP_MM = 4.0  # only used when N_MEANDERS > 1
-    TAIL_LENGTH_MM = 32.5  # ← FINE FREQUENCY TUNE
+    TAIL_LENGTH_MM = 32.0  # ← FINE FREQUENCY TUNE
 
     # ── Stitching vias ─────────────────────────────────────────────────
     VIA_HOLE_DIAMETER_MM = 0.3  # drill hole diameter
@@ -86,17 +86,17 @@ class IFASimulation:
         # (-7.2720, 6.000),
         # (-7.2720, 8.000),
         # (-7.2720, 10.000),
-        (-7.2720, 12.000),
-        (-7.2720, 14.000),
-        (-7.2720, 16.000),
-        (-7.2720, 18.000),
-        (-7.2720, 20.000),
-        (-7.2720, 22.000),
-        (-7.1220, 23.160),
-        (-7.2720, 28.500),
-        (-7.2720, 29.500),
-        (-7.2720, 30.500),
-        (-7.2720, 31.500),
+        # (-7.2720, 12.000),
+        # (-7.2720, 14.000),
+        # (-7.2720, 16.000),
+        # (-7.2720, 18.000),
+        # (-7.2720, 20.000),
+        # (-7.2720, 22.000),
+        # (-7.1220, 23.160),
+        # (-7.2720, 28.500),
+        # (-7.2720, 29.500),
+        # (-7.2720, 30.500),
+        # (-7.2720, 31.500),
     ]
 
     # ── Solver ─────────────────────────────────────────────────────────
@@ -110,8 +110,9 @@ class IFASimulation:
 
     # ──────────────────────────────────────────────────────────────────
 
-    def __init__(self, sim_dir: Path) -> None:
+    def __init__(self, sim_dir: Path, *, use_l3_as_gnd: bool = False) -> None:
         self.sim_dir = sim_dir
+        self.use_l3_as_gnd = use_l3_as_gnd
         sim_dir.mkdir(parents=True, exist_ok=True)
 
         # Derived geometry (computed once from class constants)
@@ -143,6 +144,9 @@ class IFASimulation:
             - self.F_CU_THICKNESS_MM
             - self.PREPREG_1_THICKNESS_MM
         )  # ≈ 1.355 mm
+        self.Z_L3_PWR_MM = (
+            self.Z_L2_GND_MM - self.GND_CU_THICKNESS_MM - self.CORE_THICKNESS_MM
+        )  # ≈ 0.274 mm
 
         # openEMS objects — populated by setup() and build_geometry()
         self.FDTD: openEMS | None = None
@@ -262,6 +266,15 @@ class IFASimulation:
         #     [gnd_x1, gnd_y1, self.Z_L2_GND_MM],
         #     priority=10,
         # )
+
+        # L3 — solid GND plane on PWR layer (same keepout boundary as L1).
+        # Enable with use_l3_as_gnd=True.
+        if self.use_l3_as_gnd:
+            gnd.AddBox(
+                [gnd_x0, gnd_y0, self.Z_L3_PWR_MM],
+                [gnd_x1, gnd_y1, self.Z_L3_PWR_MM],
+                priority=10,
+            )
 
         # # L4 — bottom GND pour (B.Cu, same keepout boundary)
         # gnd.AddBox(
@@ -392,7 +405,10 @@ class IFASimulation:
         self.mesh.AddLine("y", [-100, 100])
         self.mesh.AddLine("z", [-100, 100])
         # Below line is for 1 layer sim:
-        self.mesh.AddLine("z", np.linspace(0, self.BOARD_THICKNESS_MM, 6))
+        z_lines = list(np.linspace(0, self.BOARD_THICKNESS_MM, 6))
+        if self.use_l3_as_gnd:
+            z_lines.append(self.Z_L3_PWR_MM)
+        self.mesh.AddLine("z", z_lines)
 
         # Substrate z-mesh: resolve internal copper layers.
         # Thin prepreg between L1 and L2 (≈0.245 mm) needs several cells;
@@ -670,7 +686,8 @@ class IFASimulation:
 
 
 def main() -> None:
-    sim = IFASimulation(Path(__file__).parent / "manual_sim")
+    # Toggle use_l3_as_gnd=True to also model L3 (PWR layer) as a solid GND plane.
+    sim = IFASimulation(Path(__file__).parent / "manual_sim", use_l3_as_gnd=False)
     sim.run(preview=True, post_process_only=False)
 
     sim.compute_s_parameters()
