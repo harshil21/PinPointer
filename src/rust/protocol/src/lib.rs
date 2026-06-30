@@ -32,13 +32,14 @@
 //!  [42]      flight_state    u8   (0=Standby … 4=Landed)
 //! ```
 //!
-//! # Uplink layout (≥ 3 bytes, variable)
+//! # Uplink layout (≥ 4 bytes, variable)
 //!
 //! ```text
 //!  [0]       type            u8  = 0x02
 //!  [1]       command         u8  (GroundCommand discriminant)
-//!  [2]       rtk_data_len    u8  (0 – 252)
-//!  [3..]     rtk_data        bytes
+//!  [2]       command_arg     u8  (command-specific; 0 if unused)
+//!  [3]       rtk_data_len    u8  (0 – 251)
+//!  [4..]     rtk_data        bytes
 //! ```
 //!
 //! # RTCM fragment layout (≥ 5 bytes, variable)
@@ -62,8 +63,8 @@ pub const FRAG_TYPE: u8 = 0x03;
 pub const DEBUG_TYPE: u8 = 0x04;
 
 /// Maximum RTCM data bytes in a single non-fragmented uplink
-/// (255 total − 3 header bytes).
-pub const MAX_UPLINK_RTK: usize = 252;
+/// (255 total − 4 header bytes).
+pub const MAX_UPLINK_RTK: usize = 251;
 
 /// Maximum RTCM data bytes in a single fragment (255 total − 5 header bytes).
 pub const MAX_FRAG_DATA: usize = 250;
@@ -157,6 +158,8 @@ pub enum GroundCommand {
     DisableDebugTelemetry = 5,
     /// Treat the rocket's current pressure-derived altitude as the new zero.
     ZeroAltitude = 6,
+    /// Set Sirius/Sopdet LoRa transmit power. The argument is dBm, max 20.
+    SetTxPower = 7,
 }
 
 impl GroundCommand {
@@ -169,6 +172,7 @@ impl GroundCommand {
             4 => GroundCommand::EnableDebugTelemetry,
             5 => GroundCommand::DisableDebugTelemetry,
             6 => GroundCommand::ZeroAltitude,
+            7 => GroundCommand::SetTxPower,
             _ => GroundCommand::None,
         }
     }
@@ -189,6 +193,7 @@ impl core::fmt::Display for GroundCommand {
             GroundCommand::EnableDebugTelemetry => f.write_str("EnableDebugTelemetry"),
             GroundCommand::DisableDebugTelemetry => f.write_str("DisableDebugTelemetry"),
             GroundCommand::ZeroAltitude => f.write_str("ZeroAltitude"),
+            GroundCommand::SetTxPower => f.write_str("SetTxPower"),
         }
     }
 }
@@ -352,6 +357,8 @@ pub struct UplinkPacket {
     /// Command to execute on the rocket (use [`GroundCommand::None`] if only
     /// sending RTK data).
     pub command: GroundCommand,
+    /// Command-specific argument byte. Use 0 when the command has no argument.
+    pub command_arg: u8,
     /// Raw RTCM correction bytes.  Silently truncated to [`MAX_UPLINK_RTK`]
     /// bytes during serialisation.
     pub rtk_data: Vec<u8>,
@@ -361,9 +368,10 @@ impl UplinkPacket {
     /// Serialise to bytes.
     pub fn serialize(&self) -> Vec<u8> {
         let rtk = &self.rtk_data[..self.rtk_data.len().min(MAX_UPLINK_RTK)];
-        let mut b = Vec::with_capacity(3 + rtk.len());
+        let mut b = Vec::with_capacity(4 + rtk.len());
         b.push(UPLINK_TYPE);
         b.push(self.command.as_u8());
+        b.push(self.command_arg);
         b.push(rtk.len() as u8);
         b.extend_from_slice(rtk);
         b
@@ -371,16 +379,17 @@ impl UplinkPacket {
 
     /// Deserialise from a received byte slice.
     pub fn deserialize(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < 3 || bytes[0] != UPLINK_TYPE {
+        if bytes.len() < 4 || bytes[0] != UPLINK_TYPE {
             return None;
         }
-        let rtk_len = bytes[2] as usize;
-        if bytes.len() < 3 + rtk_len {
+        let rtk_len = bytes[3] as usize;
+        if bytes.len() < 4 + rtk_len {
             return None;
         }
         Some(UplinkPacket {
             command: GroundCommand::from_u8(bytes[1]),
-            rtk_data: bytes[3..3 + rtk_len].to_vec(),
+            command_arg: bytes[2],
+            rtk_data: bytes[4..4 + rtk_len].to_vec(),
         })
     }
 }
@@ -532,6 +541,9 @@ mod tests {
         assert_eq!(GroundCommand::from_u8(6), GroundCommand::ZeroAltitude);
         assert_eq!(GroundCommand::ZeroAltitude.as_u8(), 6);
         assert_eq!(GroundCommand::ZeroAltitude.to_string(), "ZeroAltitude");
+        assert_eq!(GroundCommand::from_u8(7), GroundCommand::SetTxPower);
+        assert_eq!(GroundCommand::SetTxPower.as_u8(), 7);
+        assert_eq!(GroundCommand::SetTxPower.to_string(), "SetTxPower");
     }
 
     #[test]
@@ -647,14 +659,16 @@ mod tests {
     fn uplink_none_command_no_rtk() {
         let pkt = UplinkPacket {
             command: GroundCommand::None,
+            command_arg: 0,
             rtk_data: vec![],
         };
         let bytes = pkt.serialize();
-        assert_eq!(bytes.len(), 3);
+        assert_eq!(bytes.len(), 4);
         assert_eq!(bytes[0], UPLINK_TYPE);
 
         let dec = UplinkPacket::deserialize(&bytes).unwrap();
         assert_eq!(dec.command, GroundCommand::None);
+        assert_eq!(dec.command_arg, 0);
         assert!(dec.rtk_data.is_empty());
     }
 
@@ -662,6 +676,7 @@ mod tests {
     fn uplink_emergency_locate_roundtrip() {
         let pkt = UplinkPacket {
             command: GroundCommand::EmergencyLocate,
+            command_arg: 0,
             rtk_data: vec![],
         };
         let dec = UplinkPacket::deserialize(&pkt.serialize()).unwrap();
@@ -672,6 +687,7 @@ mod tests {
     fn uplink_deploy_ejection_charge_roundtrip() {
         let pkt = UplinkPacket {
             command: GroundCommand::DeployEjectionCharge,
+            command_arg: 0,
             rtk_data: vec![0xD3, 0x00, 0x13],
         };
         let dec = UplinkPacket::deserialize(&pkt.serialize()).unwrap();
@@ -684,6 +700,7 @@ mod tests {
         let rtk: Vec<u8> = (0u8..200).collect();
         let pkt = UplinkPacket {
             command: GroundCommand::None,
+            command_arg: 0,
             rtk_data: rtk.clone(),
         };
         let dec = UplinkPacket::deserialize(&pkt.serialize()).unwrap();
@@ -695,11 +712,25 @@ mod tests {
         let big = vec![0xAAu8; MAX_UPLINK_RTK + 100];
         let pkt = UplinkPacket {
             command: GroundCommand::None,
+            command_arg: 0,
             rtk_data: big,
         };
         let bytes = pkt.serialize();
         assert!(bytes.len() <= 255, "uplink exceeds LoRa maximum payload");
-        assert_eq!(bytes[2] as usize, MAX_UPLINK_RTK);
+        assert_eq!(bytes[3] as usize, MAX_UPLINK_RTK);
+    }
+
+    #[test]
+    fn uplink_set_tx_power_roundtrip() {
+        let pkt = UplinkPacket {
+            command: GroundCommand::SetTxPower,
+            command_arg: 13,
+            rtk_data: vec![0xD3],
+        };
+        let dec = UplinkPacket::deserialize(&pkt.serialize()).unwrap();
+        assert_eq!(dec.command, GroundCommand::SetTxPower);
+        assert_eq!(dec.command_arg, 13);
+        assert_eq!(dec.rtk_data, vec![0xD3]);
     }
 
     #[test]
@@ -710,7 +741,7 @@ mod tests {
 
     #[test]
     fn uplink_rejects_wrong_type() {
-        let bytes = [0xFF, 0x00, 0x00];
+        let bytes = [0xFF, 0x00, 0x00, 0x00];
         assert!(UplinkPacket::deserialize(&bytes).is_none());
     }
 

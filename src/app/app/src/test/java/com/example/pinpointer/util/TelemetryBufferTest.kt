@@ -15,7 +15,7 @@ class TelemetryBufferTest {
     @Test
     fun testRollingWindow() = runBlocking {
         val mockApi = mock(SopdetApi::class.java)
-        val repository = TelemetryRepository(mockApi)
+        val repository = TelemetryRepository(mockApi, "127.0.0.1")
         
         // We can't easily test startPolling because it's an infinite loop
         // but we can test the history logic if we expose it or use a mock.

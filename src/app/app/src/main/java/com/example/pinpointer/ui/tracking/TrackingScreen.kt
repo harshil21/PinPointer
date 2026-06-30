@@ -1,5 +1,7 @@
 package com.example.pinpointer.ui.tracking
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -25,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.FlightTakeoff
 import androidx.compose.material.icons.rounded.GpsFixed
 import androidx.compose.material.icons.rounded.GpsOff
@@ -34,13 +37,19 @@ import androidx.compose.material.icons.rounded.SignalCellularOff
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -70,6 +79,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.example.pinpointer.ui.theme.DataTextStyle
 import com.example.pinpointer.ui.theme.DataTextStyleLarge
 import com.example.pinpointer.ui.theme.DataTextStyleSmall
@@ -81,7 +91,6 @@ import com.example.pinpointer.ui.theme.FlightStateFreefall
 import com.example.pinpointer.ui.theme.FlightStateLanded
 import com.example.pinpointer.ui.theme.FlightStateMotorBurn
 import com.example.pinpointer.ui.theme.FlightStateStandby
-import com.example.pinpointer.ui.theme.RadarBackground
 import com.example.pinpointer.ui.theme.RadarGrid
 import kotlinx.coroutines.delay
 import kotlin.math.cos
@@ -170,133 +179,114 @@ fun TrackingScreen(viewModel: TrackingViewModel) {
     val snrSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sheetScope = rememberCoroutineScope()
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // ── TOP: scrollable telemetry ──────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .heightIn(max = 420.dp)        // cap so bottom reticle always shows
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // ── Pill row ───────────────────────────────────────────────────
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .heightIn(max = 390.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    SignalPill(state)
-                    FlightStatePill(t?.flightState ?: 0)
-                    PyroPill(t?.pyroContinuity ?: false, t?.pyroDeployed ?: false)
-                    if (state.isForceRssiMode) RssiModePill()
-                }
-
-                // ── Tier 1: Big altitude cards ─────────────────────────────────
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    BigMetricCard(
-                        modifier = Modifier.weight(1f),
-                        label = "Baro Alt",
-                        value = t?.altitudeM ?: 0f,
-                        formatValue = { "%.2f m".format(it) },
-                        trendThreshold = 0.3f
-                    )
-                    BigMetricCard(
-                        modifier = Modifier.weight(1f),
-                        label = if (gpsAltRelative) "GPS Alt (AGL)" else "GPS Alt (MSL)",
-                        value = if (gpsAltRelative && firstGpsAlt != null)
-                            (t?.gpsAltM ?: 0f) - (firstGpsAlt ?: 0f)
-                        else t?.gpsAltM ?: 0f,
-                        formatValue = { "%.2f m".format(it) },
-                        trendThreshold = 0.3f,
-                        clickLabel = if (gpsAltRelative) "Switch to MSL" else "Switch to AGL",
-                        onClick = { gpsAltRelative = !gpsAltRelative },
-                        badge = if (gpsAltRelative) "AGL ⇄" else "MSL ⇄"
-                    )
-                }
-
-                // ── Tier 2: RSSI + RTK ─────────────────────────────────────────
-                // ── Tier 2: RSSI + RTK + GPS SNR ─────────────────────────────────────────────────────────────────────
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    MediumMetricCard(
-                        modifier = Modifier.weight(1f),
-                        label = "RSSI",
-                        value = (t?.rssi ?: 0).toFloat(),
-                        formatValue = { "${it.toInt()} dBm" },
-                        trendThreshold = 1f
-                    )
-                    RtkFixCard(
-                        modifier = Modifier.weight(1f),
-                        rtkFix = t?.rtkFix
-                    )
-                    // Rocket GPS SNR — tap to see per-constellation breakdown.
-                    RocketSnrCard(
-                        modifier = Modifier.weight(1f),
-                        summary = snrSummary,
-                        onClick = { snrSheetOpen = true }
-                    )
-                }
-
-                // ── Tier 3: Velocity / Accel / SNR ────────────────────────────
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    SmallMetricCard(
-                        Modifier.weight(1f), "Velocity",
-                        (t?.velocityMps ?: 0f),
-                        { "%+.1f m/s".format(it) }, 0.1f
-                    )
-                    SmallMetricCard(
-                        Modifier.weight(1f), "Accel Z",
-                        (t?.accelZGs ?: 0f),
-                        { "%.2f g".format(it) }, 0.05f
-                    )
-                    SmallMetricCard(
-                        Modifier.weight(1f), "SNR",
-                        (t?.snr ?: 0f),
-                        { "%.1f dB".format(it) }, 0.5f
-                    )
-                }
-
-                // ── GPS coordinates (compact) ──────────────────────────────────
-                if (t != null && t.gpsLat != 0.0) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.medium)
-                            .background(MaterialTheme.colorScheme.surfaceContainer)
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(
-                            text = "GPS  %.8f°  %.8f°".format(t.gpsLat, t.gpsLon),
-                            style = DataTextStyleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                        SignalPill(state)
+                        FlightStatePill(t?.flightState ?: 0)
+                        PyroPill(t?.pyroContinuity ?: false, t?.pyroDeployed ?: false)
+                        if (state.isForceRssiMode) RssiModePill()
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        BigMetricCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Baro Alt",
+                            value = t?.altitudeM ?: 0f,
+                            formatValue = { "%.2f m".format(it) },
+                            trendThreshold = 0.3f
+                        )
+                        BigMetricCard(
+                            modifier = Modifier.weight(1f),
+                            label = if (gpsAltRelative) "GPS Alt (AGL)" else "GPS Alt (MSL)",
+                            value = if (gpsAltRelative && firstGpsAlt != null)
+                                (t?.gpsAltM ?: 0f) - (firstGpsAlt ?: 0f)
+                            else t?.gpsAltM ?: 0f,
+                            formatValue = { "%.2f m".format(it) },
+                            trendThreshold = 0.3f,
+                            clickLabel = if (gpsAltRelative) "Switch to MSL" else "Switch to AGL",
+                            onClick = { gpsAltRelative = !gpsAltRelative },
+                            badge = if (gpsAltRelative) "AGL ⇄" else "MSL ⇄"
+                        )
+                    }
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        MediumMetricCard(
+                            modifier = Modifier.weight(1f),
+                            label = "RSSI",
+                            value = (t?.rssi ?: 0).toFloat(),
+                            formatValue = { "${it.toInt()} dBm" },
+                            trendThreshold = 1f
+                        )
+                        RtkFixCard(
+                            modifier = Modifier.weight(1f),
+                            rtkFix = t?.rtkFix
+                        )
+                        RocketSnrCard(
+                            modifier = Modifier.weight(1f),
+                            summary = snrSummary,
+                            onClick = { snrSheetOpen = true }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SmallMetricCard(
+                            Modifier.weight(1f), "Velocity",
+                            (t?.velocityMps ?: 0f),
+                            { "%+.1f m/s".format(it) }, 0.1f
+                        )
+                        SmallMetricCard(
+                            Modifier.weight(1f), "Accel Z",
+                            (t?.accelZGs ?: 0f),
+                            { "%.2f g".format(it) }, 0.05f
+                        )
+                        SmallMetricCard(
+                            Modifier.weight(1f), "SNR",
+                            (t?.snr ?: 0f),
+                            { "%.1f dB".format(it) }, 0.5f
+                        )
+                    }
+
+                    if (t != null && t.gpsLat != 0.0) {
+                        GpsCoordinateRow(
+                            latitude = t.gpsLat,
+                            longitude = t.gpsLon,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
                 }
-            }
 
-            // ── BOTTOM: antenna pointing (takes all remaining height) ──────────
-            AntennaPointingSection(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                uiState = state,
-                onRecalibrate = { viewModel.recalibrateRssiTracking() }
-            )
+                AntennaPointingSection(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    uiState = state,
+                    onRecalibrate = { viewModel.recalibrateRssiTracking() }
+                )
+            }
         }
     }
 
@@ -312,6 +302,46 @@ fun TrackingScreen(viewModel: TrackingViewModel) {
                     sheetScope.launch { snrSheetState.hide() }
                         .invokeOnCompletion { if (!snrSheetState.isVisible) snrSheetOpen = false }
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun GpsCoordinateRow(
+    latitude: Double,
+    longitude: Double,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val coords = "%.8f, %.8f".format(latitude, longitude)
+    Row(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.42f))
+            .padding(start = 10.dp, end = 4.dp, top = 3.dp, bottom = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = "GPS  $coords",
+            style = DataTextStyleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        FilledTonalIconButton(
+            onClick = {
+                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                clipboard?.setPrimaryClip(ClipData.newPlainText("Rocket GPS", coords))
+            },
+            modifier = Modifier.size(30.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.ContentCopy,
+                contentDescription = "Copy GPS coordinates",
+                modifier = Modifier.size(14.dp)
             )
         }
     }
@@ -422,10 +452,10 @@ private fun BigMetricCard(
 
     Box(
         modifier = modifier
-            .clip(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.52f))
             .then(if (onClick != null) Modifier.clickable(onClickLabel = clickLabel) { onClick() } else Modifier)
-            .padding(12.dp)
+            .padding(horizontal = 12.dp, vertical = 14.dp)
     ) {
         Column {
             Row(
@@ -483,7 +513,7 @@ private fun MediumMetricCard(
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.42f))
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Column {
@@ -528,7 +558,7 @@ private fun RtkFixCard(modifier: Modifier, rtkFix: String?) {
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.42f))
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Column {
@@ -562,7 +592,7 @@ private fun SmallMetricCard(
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.38f))
             .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {
         Column {
@@ -635,8 +665,7 @@ private fun AntennaPointingSection(
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(containerColor)
+            .background(containerColor.copy(alpha = 0.0f))
             .padding(top = 12.dp, start = 14.dp, end = 14.dp, bottom = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -718,8 +747,6 @@ private fun AntennaPointingSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer) // slight tint for the canvas area
                 .drawBehind {
                     drawReticle(
                         textMeasurer, animAz, animEl, dotColor,
@@ -761,27 +788,36 @@ private fun AntennaPointingSection(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RecalibrateButton(enabled: Boolean, onClick: () -> Unit) {
-    FilledTonalButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Rounded.Refresh,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = if (enabled) "Recalibrate — Pan Phone Again"
-            else "Recalibrate (RSSI mode only)",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold
-        )
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(
+                TooltipAnchorPosition.Above
+            ),
+            tooltip = {
+                PlainTooltip {
+                    Text(
+                        if (enabled) "Recalibrate RSSI scan"
+                        else "Recalibrate is available in RSSI scan mode"
+                    )
+                }
+            },
+            state = rememberTooltipState()
+        ) {
+            FilledTonalIconButton(
+                onClick = onClick,
+                enabled = enabled,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Refresh,
+                    contentDescription = "Recalibrate RSSI scan",
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
     }
 }
 
@@ -953,7 +989,7 @@ private fun RocketSnrCard(
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.42f))
             .clickable(onClickLabel = "Show SNR details") { onClick() }
             .padding(horizontal = 10.dp, vertical = 8.dp)
     ) {

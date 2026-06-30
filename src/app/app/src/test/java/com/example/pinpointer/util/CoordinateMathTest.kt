@@ -51,7 +51,13 @@ class CoordinateMathTest {
         // Pr = Pt + Gt + Gr - L = 20 + 2 + 8.4 - 71.68 = -41.28 dBm
         
         val rssi = -41
-        val distance = CoordinateMath.estimateDistanceFriis(rssi)
+        val distance = CoordinateMath.estimateDistanceFriis(rssi, txPowerDbm = 20.0)
+        assertEquals(96.8, distance, 1.0)
+    }
+
+    @Test
+    fun testFriisDefaultTxPowerIs13Dbm() {
+        val distance = CoordinateMath.estimateDistanceFriis(-48)
         assertEquals(96.8, distance, 1.0)
     }
 }

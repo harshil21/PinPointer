@@ -9,6 +9,23 @@ use rtk::GgaData;
 /// Maximum number of downlink telemetry entries kept in memory.
 pub const MAX_TELEMETRY_HISTORY: usize = 1000;
 
+/// Ground command waiting to be transmitted, with an optional argument byte.
+#[derive(Debug, Clone, Copy)]
+pub struct PendingCommand {
+    pub command: GroundCommand,
+    pub arg: u8,
+}
+
+impl PendingCommand {
+    pub fn new(command: GroundCommand) -> Self {
+        Self { command, arg: 0 }
+    }
+
+    pub fn with_arg(command: GroundCommand, arg: u8) -> Self {
+        Self { command, arg }
+    }
+}
+
 /// Per-constellation GPS SNR snapshot.
 ///
 /// Each field holds the most-recent average SNR (dB-Hz) reported by the
@@ -74,7 +91,7 @@ pub struct AppState {
     /// Ring buffer of received downlink packets (newest at the back).
     pub telemetry: Vec<TelemetryEntry>,
     /// Commands queued by the HTTP server, waiting to be transmitted to the rocket.
-    pub pending_commands: VecDeque<GroundCommand>,
+    pub pending_commands: VecDeque<PendingCommand>,
     /// Latest GPS position fix reported by the base-station LC29H module.
     pub latest_gps: Option<GgaData>,
     /// True once the survey-in has fully converged.

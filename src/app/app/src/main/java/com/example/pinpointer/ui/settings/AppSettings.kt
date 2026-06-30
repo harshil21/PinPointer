@@ -10,6 +10,8 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Force RSSI-only direction-finding even when a GPS fix is available. */
     val forceRssiOnly: Boolean = false,
+    /** LoRa transmit power used by Sopdet/Sirius and the Friis RSSI estimate. */
+    val txPowerDbm: Int = 13,
     /** Survey-in minimum duration in seconds (10–600 s, default 150 s). */
     val svinDurationSeconds: Int = 150
 )

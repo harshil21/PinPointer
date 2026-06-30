@@ -48,7 +48,8 @@ data class TrackingUiState(
     val rssiScanCoverage: Float = 0f,
     val rssiAzimuthBins: List<Boolean> = List(36) { false },
     val rssiMaxRssi: Int = -120,
-    val rssiSampleCount: Int = 0
+    val rssiSampleCount: Int = 0,
+    val rssiCalibrationEpoch: Int = 0
 )
 
 class TrackingViewModel(
@@ -76,6 +77,13 @@ class TrackingViewModel(
         _forceRssiOnly.value = value
     }
 
+    private val _txPowerDbm = MutableStateFlow(13)
+    fun setTxPowerDbm(value: Int) {
+        _txPowerDbm.value = value.coerceIn(2, 20)
+    }
+
+    private val _rssiCalibrationEpoch = MutableStateFlow(0)
+
     /**
      * Discard all RSSI samples and reset the direction finder. Used by the
      * "Recalibrate" button on the Tracking screen — only effective while we
@@ -84,25 +92,42 @@ class TrackingViewModel(
     fun recalibrateRssiTracking() {
         rssiDirectionFinder.clear()
         lastRssiSampleSeq = -1
+        _rssiCalibrationEpoch.value += 1
     }
 
     init {
         viewModelScope.launch { repository.startPolling() }
-        orientationTracker.start()
     }
 
     override fun onCleared() {
         super.onCleared()
+        dispose()
+    }
+
+    fun dispose() {
         repository.stopPolling()
-        orientationTracker.stop()
+    }
+
+    private data class TrackingSettings(
+        val forceRssi: Boolean,
+        val txPowerDbm: Int,
+        val calibrationEpoch: Int
+    )
+
+    private val trackingSettings = combine(
+        _forceRssiOnly,
+        _txPowerDbm,
+        _rssiCalibrationEpoch
+    ) { forceRssi, txPowerDbm, calibrationEpoch ->
+        TrackingSettings(forceRssi, txPowerDbm, calibrationEpoch)
     }
 
     val uiState: StateFlow<TrackingUiState> = combine(
         repository.latestTelemetry,
         repository.status,
         orientationTracker.orientation,
-        _forceRssiOnly
-    ) { telemetry, status, orientation, forceRssi ->
+        trackingSettings
+    ) { telemetry, status, orientation, settings ->
 
         // ── Signal state ───────────────────────────────────────────────────────
         val now = System.currentTimeMillis()
@@ -119,7 +144,7 @@ class TrackingViewModel(
 
         val signalState = when {
             telemetry == null || secondsSince > 5L -> SignalState.LOST_CONTACT
-            !forceRssi && telemetry.rtkFix !in listOf("NoFix", "DeadReckoning")
+            !settings.forceRssi && telemetry.rtkFix !in listOf("NoFix", "DeadReckoning")
                     && status?.gpsFix != null -> SignalState.GPS_FIX
 
             else -> SignalState.RSSI_ONLY
@@ -131,7 +156,7 @@ class TrackingViewModel(
         var targetElevation = 0.0
         var distanceIsGps = false
 
-        if (!forceRssi && telemetry != null && status?.gpsFix != null
+        if (!settings.forceRssi && telemetry != null && status?.gpsFix != null
             && telemetry.gpsLat != 0.0 && telemetry.gpsLon != 0.0
             && status.gpsFix.latitude != 0.0
         ) {
@@ -150,7 +175,10 @@ class TrackingViewModel(
             )
             distanceIsGps = true
         } else if (telemetry != null) {
-            distanceM = CoordinateMath.estimateDistanceFriis(telemetry.rssi)
+            distanceM = CoordinateMath.estimateDistanceFriis(
+                telemetry.rssi,
+                txPowerDbm = settings.txPowerDbm.toDouble()
+            )
         }
 
         // ── RSSI finder ────────────────────────────────────────────────────────
@@ -213,12 +241,13 @@ class TrackingViewModel(
             deviationElevation = devEl,
             distanceIsGps = distanceIsGps,
             targetSource = targetSource,
-            isForceRssiMode = forceRssi,
+            isForceRssiMode = settings.forceRssi,
             rssiHasEstimate = rssiHasEst,
             rssiScanCoverage = rssiDirectionFinder.coverage,
             rssiAzimuthBins = rssiDirectionFinder.azimuthBins,
             rssiMaxRssi = rssiDirectionFinder.maxRssi,
-            rssiSampleCount = rssiDirectionFinder.sampleCount
+            rssiSampleCount = rssiDirectionFinder.sampleCount,
+            rssiCalibrationEpoch = settings.calibrationEpoch
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackingUiState())
 }

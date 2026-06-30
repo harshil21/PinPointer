@@ -18,7 +18,9 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use rtk::WireMessage;
 use rtk::port::BaseGPS;
-use rtk::protocol::commands::{PQTMCfgMsgRate, PQTMCfgNmeaDp, PQTMCfgRcvrMode, PQTMCfgSvin, PQTMMsgName};
+use rtk::protocol::commands::{
+    PQTMCfgMsgRate, PQTMCfgNmeaDp, PQTMCfgRcvrMode, PQTMCfgSvin, PQTMMsgName,
+};
 use rtk::protocol::pair::{
     NmeaOutputRateTypes, PairCommonSetNmeaOutputRate, PairRTCMSetOutputAntPnt,
     PairRTCMSetOutputMode, RtcmAntPnt, RtcmMode,
@@ -190,20 +192,19 @@ fn configure_gps(gps: &mut BaseGPS, svin_duration_s: u32) {
 
     // Make coordinates more precise (6 decimal places -> 8)
     match gps.cfg_nmea_dp_write(
-        PQTMCfgNmeaDp{
+        PQTMCfgNmeaDp {
             utc_dp: 3,
             pos_dp: 8,
             alt_dp: 3,
             dop_dp: 2,
             spd_dp: 3,
             cog_dp: 2,
-        }, CMD_TIMEOUT) {
-            Ok(_) => log::info!("Increased decimal precision for coords"),
-            Err(e) => log::warn!(
-                "Failed to increase decimal precision: {:?}",
-                e
-            ),
-        }
+        },
+        CMD_TIMEOUT,
+    ) {
+        Ok(_) => log::info!("Increased decimal precision for coords"),
+        Err(e) => log::warn!("Failed to increase decimal precision: {:?}", e),
+    }
 
     log::info!("Saving parameters to flash ($PQTMSAVEPAR)...");
     match gps.save_par(CMD_TIMEOUT) {

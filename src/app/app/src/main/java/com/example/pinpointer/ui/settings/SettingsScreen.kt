@@ -46,7 +46,8 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
-    onSvinApply: (Int) -> Unit = {}
+    onSvinApply: (Int) -> Unit = {},
+    onTxPowerApply: (Int) -> Unit = {}
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -127,6 +128,14 @@ fun SettingsScreen(
                         checked = settings.forceRssiOnly,
                         onCheckedChange = { onSettingsChange(settings.copy(forceRssiOnly = it)) }
                     )
+                    Spacer(Modifier.height(18.dp))
+                    TxPowerRow(
+                        current = settings.txPowerDbm,
+                        onApply = { dbm ->
+                            onSettingsChange(settings.copy(txPowerDbm = dbm))
+                            onTxPowerApply(dbm)
+                        }
+                    )
                 }
             }
 
@@ -139,6 +148,68 @@ fun SettingsScreen(
                         onSvinApply(newDuration)
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TxPowerRow(current: Int, onApply: (Int) -> Unit) {
+    var text by remember(current) { mutableStateOf(current.toString()) }
+    val parsed = text.toIntOrNull()
+    val valid = parsed != null && parsed in 2..20
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.SignalCellularAlt,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 12.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text("TX Power", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "Sets Sopdet and Sirius LoRa output power and the Friis RSSI distance model.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.filter { c -> c.isDigit() }.take(2) },
+                    label = { Text("dBm") },
+                    isError = !valid && text.isNotEmpty(),
+                    supportingText = {
+                        if (!valid && text.isNotEmpty()) {
+                            Text("Use 2-20 dBm", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    shape = MaterialTheme.shapes.large,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary
+                    )
+                )
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = { parsed?.let(onApply) },
+                    enabled = valid,
+                    shape = MaterialTheme.shapes.large
+                ) { Text("Apply") }
             }
         }
     }
@@ -184,7 +255,7 @@ private fun SvinDurationCard(current: Int, onApply: (Int) -> Unit) {
                 )
             )
             androidx.compose.material3.FilledTonalButton(
-                onClick = { if (valid) onApply(parsed!!) },
+                onClick = { parsed?.let(onApply) },
                 enabled = valid,
                 shape = MaterialTheme.shapes.large
             ) { Text("Apply") }

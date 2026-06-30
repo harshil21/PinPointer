@@ -85,3 +85,7 @@ data class CommandResponse(
 data class SvinConfigBody(
     @SerializedName("duration_s") val durationS: Int
 )
+
+data class TxPowerBody(
+    @SerializedName("tx_power_dbm") val txPowerDbm: Int
+)

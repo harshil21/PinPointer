@@ -13,40 +13,59 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.GpsFixed
 import androidx.compose.material.icons.rounded.GpsNotFixed
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.SyncAlt
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.pinpointer.data.repository.BaseStationConnectionState
 import com.example.pinpointer.data.model.ConstellationSnrJson
 import com.example.pinpointer.data.model.GpsFixJson
 import com.example.pinpointer.data.model.StatusJson
 import com.example.pinpointer.ui.theme.DataTextStyleSmall
 import com.example.pinpointer.ui.tracking.TrackingViewModel
+import com.example.pinpointer.util.ConnectionPrefs
 
 @Composable
-fun BaseStationScreen(viewModel: TrackingViewModel) {
+fun BaseStationScreen(
+    viewModel: TrackingViewModel,
+    baseStationHost: String,
+    onConnect: (String) -> Unit
+) {
     val uiState by viewModel.uiState.collectAsState()
+    val connectionState by viewModel.repository.connectionState.collectAsState()
     val status = uiState.status
+    var hostText by remember(baseStationHost) { mutableStateOf(baseStationHost) }
+    val validHost = ConnectionPrefs.isValidHostOrIp(hostText)
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -73,10 +92,84 @@ fun BaseStationScreen(viewModel: TrackingViewModel) {
                 )
             }
 
+            item {
+                ConnectionCard(
+                    hostText = hostText,
+                    onHostTextChange = { hostText = it },
+                    validHost = validHost,
+                    state = connectionState,
+                    onConnect = { onConnect(hostText) }
+                )
+            }
+
             item { GpsStatusCard(status?.gpsFix, status?.gpsSNR ?: ConstellationSnrJson()) }
             item { SurveyInCard(status) }
             item { DownlinkCard(status) }
             item { SystemCard(status) }
+        }
+    }
+}
+
+@Composable
+private fun ConnectionCard(
+    hostText: String,
+    onHostTextChange: (String) -> Unit,
+    validHost: Boolean,
+    state: BaseStationConnectionState,
+    onConnect: () -> Unit
+) {
+    val (label, color, icon) = when (state) {
+        BaseStationConnectionState.DISCONNECTED ->
+            Triple("Not connected", MaterialTheme.colorScheme.outline, Icons.Rounded.Wifi)
+        BaseStationConnectionState.ONLINE ->
+            Triple("Online", MaterialTheme.colorScheme.primary, Icons.Rounded.CheckCircle)
+        BaseStationConnectionState.SOPDET_UNAVAILABLE ->
+            Triple("Host reachable, Sopdet unavailable", MaterialTheme.colorScheme.tertiary, Icons.Rounded.Error)
+        BaseStationConnectionState.HOST_UNREACHABLE ->
+            Triple("Base station host unreachable", MaterialTheme.colorScheme.error, Icons.Rounded.Error)
+    }
+
+    SectionCard(title = "Connection", icon = icon, iconTint = color) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            StatusDot(color)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = color,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = hostText,
+                onValueChange = onHostTextChange,
+                label = { Text("Base Station Host or IP") },
+                isError = !validHost && hostText.isNotBlank(),
+                supportingText = {
+                    if (!validHost && hostText.isNotBlank()) {
+                        Text("Enter host, host:port, or IPv4", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Go,
+                    autoCorrectEnabled = false
+                ),
+                singleLine = true,
+                modifier = Modifier.weight(1f)
+            )
+            Button(
+                onClick = onConnect,
+                enabled = validHost,
+            ) {
+                Text("Connect")
+            }
         }
     }
 }

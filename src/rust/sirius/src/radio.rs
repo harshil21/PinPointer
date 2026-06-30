@@ -35,7 +35,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use rfm95::{Bandwidth, LoraConfig, Rfm95, Rfm95Error, SpreadingFactor};
+use rfm95::{Bandwidth, LoraConfig, PaConfig, Rfm95, Rfm95Error, SpreadingFactor};
 
 use protocol::{
     DOWNLINK_TYPE, DebugDownlinkPacket, DownlinkPacket, FRAG_TYPE, GroundCommand, RtcmFragment,
@@ -259,6 +259,7 @@ pub fn run_radio_thread(
                 // contact would start the CONTACT_LOST_TIMEOUT countdown and
                 // trigger the emergency buzzer 5 s later.
                 let valid_contact = handle_received(
+                    &mut radio,
                     &pkt.payload,
                     &rtk_tx,
                     &rx_log_tx,
@@ -334,6 +335,7 @@ pub fn run_radio_thread(
 /// for unknown/reflected/unparseable payloads so that spurious radio noise
 /// does not start the contact-lost countdown.
 fn handle_received(
+    radio: &mut Rfm95,
     payload: &[u8],
     rtk_tx: &mpsc::Sender<Vec<u8>>,
     rx_log_tx: &mpsc::Sender<Vec<u8>>,
@@ -397,6 +399,22 @@ fn handle_received(
                         GroundCommand::ZeroAltitude => {
                             log::info!("[radio] ZeroAltitude command received");
                             zero_altitude_flag.store(true, Ordering::Relaxed);
+                        }
+
+                        GroundCommand::SetTxPower => {
+                            let dbm = uplink.command_arg.min(20);
+                            let config = PaConfig {
+                                output_power: dbm as i8,
+                                ..PaConfig::default()
+                            };
+                            match radio.set_pa_config(&config) {
+                                Ok(()) => log::info!("[radio] TX power set to {} dBm", dbm),
+                                Err(e) => log::warn!(
+                                    "[radio] Failed to set TX power to {} dBm: {}",
+                                    dbm,
+                                    e
+                                ),
+                            }
                         }
                     }
 

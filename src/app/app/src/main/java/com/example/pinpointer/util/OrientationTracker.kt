@@ -138,11 +138,11 @@ object CoordinateMath {
 
     /**
      * Estimate slant distance using the Friis transmission equation.
-     * Defaults: TX power 20 dBm, yagi gain 8.4 dBi, PCB antenna gain 2 dBi.
+     * Defaults: TX power 13 dBm, yagi gain 8.4 dBi, PCB antenna gain 2 dBi.
      */
     fun estimateDistanceFriis(
         rssi: Int,
-        txPowerDbm: Double = 20.0,
+        txPowerDbm: Double = 13.0,
         freqMhz: Double = 915.0,
         gTxDbi: Double = 2.0,
         gRxDbi: Double = 8.4

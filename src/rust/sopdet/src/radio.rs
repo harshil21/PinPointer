@@ -22,10 +22,10 @@ use protocol::{
     DEBUG_TYPE, DOWNLINK_TYPE, DebugDownlinkPacket, DownlinkPacket, GroundCommand, MAX_FRAG_DATA,
     MAX_UPLINK_RTK, RtcmFragment, UplinkPacket,
 };
-use rfm95::{Bandwidth, LoraConfig, Rfm95, SpreadingFactor};
+use rfm95::{Bandwidth, LoraConfig, PaConfig, Rfm95, SpreadingFactor};
 
 use crate::logger::{Logger, TelemetryLogEntry};
-use crate::state::{AppState, RocketDebugSnr, TelemetryEntry};
+use crate::state::{AppState, PendingCommand, RocketDebugSnr, TelemetryEntry};
 
 // ── Timing constants ──────────────────────────────────────────────────────────
 
@@ -96,7 +96,11 @@ impl UplinkLogBatcher {
         let lens_summary = if self.lens.len() == self.count as usize {
             format!("{:?}", self.lens)
         } else {
-            format!("{:?}+{}more", self.lens, self.count as usize - self.lens.len())
+            format!(
+                "{:?}+{}more",
+                self.lens,
+                self.count as usize - self.lens.len()
+            )
         };
 
         log::info!(
@@ -244,11 +248,13 @@ pub fn run_radio_thread(
         // both in a single transmission.  If there is no pending command,
         // GroundCommand::None is used (meaning "RTK data only").
         if let Ok(rtcm_bytes) = rtcm_rx.try_recv() {
-            let command = pop_pending_command(&state).unwrap_or(GroundCommand::None);
+            let pending = pop_pending_command(&state)
+                .unwrap_or_else(|| PendingCommand::new(GroundCommand::None));
+            apply_local_command(&mut radio, pending);
             transmit_rtcm(
                 &mut radio,
                 rtcm_bytes,
-                command,
+                pending,
                 &mut session_id,
                 &logger,
                 &mut tx_log,
@@ -257,6 +263,7 @@ pub fn run_radio_thread(
         } else if let Some(command) = pop_pending_command(&state) {
             // No RTCM data this tick but the operator issued a command — send
             // it immediately rather than waiting for the next RTCM frame.
+            apply_local_command(&mut radio, command);
             transmit_command_only(&mut radio, command, &logger, &mut tx_log);
             restart_rx(&mut radio);
         }
@@ -278,11 +285,26 @@ fn restart_rx(radio: &mut Rfm95) {
 }
 
 /// Pop the front of the pending-commands queue, returning `None` if empty.
-fn pop_pending_command(state: &Arc<Mutex<AppState>>) -> Option<GroundCommand> {
+fn pop_pending_command(state: &Arc<Mutex<AppState>>) -> Option<PendingCommand> {
     state
         .lock()
         .ok()
         .and_then(|mut s| s.pending_commands.pop_front())
+}
+
+fn apply_local_command(radio: &mut Rfm95, pending: PendingCommand) {
+    if pending.command != GroundCommand::SetTxPower {
+        return;
+    }
+    let dbm = pending.arg.min(20);
+    let config = PaConfig {
+        output_power: dbm as i8,
+        ..PaConfig::default()
+    };
+    match radio.set_pa_config(&config) {
+        Ok(()) => log::info!("Applied local Sopdet TX power: {} dBm", dbm),
+        Err(e) => log::warn!("Failed to apply Sopdet TX power {} dBm: {}", dbm, e),
+    }
 }
 
 // ── Downlink handling ─────────────────────────────────────────────────────────
@@ -407,15 +429,17 @@ struct BaseSnrSnapshot {
 fn transmit_rtcm(
     radio: &mut Rfm95,
     data: Vec<u8>,
-    command: GroundCommand,
+    pending: PendingCommand,
     session_id: &mut u8,
     logger: &Logger,
     tx_log: &mut UplinkLogBatcher,
 ) {
+    let command = pending.command;
     if data.len() <= MAX_UPLINK_RTK {
         // ── Single UplinkPacket ───────────────────────────────────────────────
         let uplink = UplinkPacket {
             command,
+            command_arg: pending.arg,
             rtk_data: data.clone(),
         };
         let bytes = uplink.serialize();
@@ -541,7 +565,7 @@ fn transmit_rtcm(
         // If the operator also issued a command, send it now as a standalone
         // uplink so it is not silently dropped.
         if command != GroundCommand::None {
-            transmit_command_only(radio, command, logger, tx_log);
+            transmit_command_only(radio, pending, logger, tx_log);
         }
     }
 }
@@ -552,12 +576,14 @@ fn transmit_rtcm(
 /// with, or after a fragmented session when the command could not be inlined.
 fn transmit_command_only(
     radio: &mut Rfm95,
-    command: GroundCommand,
+    pending: PendingCommand,
     logger: &Logger,
     tx_log: &mut UplinkLogBatcher,
 ) {
+    let command = pending.command;
     let uplink = UplinkPacket {
         command,
+        command_arg: pending.arg,
         rtk_data: vec![],
     };
     let bytes = uplink.serialize();
@@ -654,7 +680,10 @@ mod tests {
         b.record(GroundCommand::None, 10);
         // last_flush is fresh — flush should be a no-op.
         b.flush_if_due();
-        assert_eq!(b.count, 1, "should not have flushed before interval elapsed");
+        assert_eq!(
+            b.count, 1,
+            "should not have flushed before interval elapsed"
+        );
     }
 
     #[test]

@@ -14,17 +14,17 @@
 //! | POST   | `/command/debug/on`   | Enable per-constellation SNR debug downlink      |
 //! | POST   | `/command/debug/off`  | Disable per-constellation SNR debug downlink     |
 //! | POST   | `/command/zero-altitude` | Zero Sirius pressure altitude                 |
+//! | POST   | `/command/tx-power`   | Set LoRa TX power `{"tx_power_dbm": N}`          |
 //! | POST   | `/resurvey`           | Restart GPS survey-in                            |
 //! | POST   | `/config/svin`        | Set survey-in duration `{"duration_s": N}`       |
 
-use std::io::Read;
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tiny_http::{Header, Request, Response, Server};
 
 use crate::logger::{AccessLogEntry, Logger};
-use crate::state::AppState;
+use crate::state::{AppState, PendingCommand};
 
 // ── JSON response types ───────────────────────────────────────────────────────
 
@@ -126,6 +126,12 @@ struct SvinConfigBody {
     duration_s: u32,
 }
 
+/// Body accepted by POST /command/tx-power.
+#[derive(Deserialize)]
+struct TxPowerBody {
+    tx_power_dbm: u8,
+}
+
 /// Returned for any error condition.
 #[derive(Serialize)]
 struct ErrorResponse {
@@ -151,7 +157,7 @@ pub fn run_server(addr: &str, state: Arc<Mutex<AppState>>, logger: Logger) {
 
     log::info!("HTTP server listening on http://{}", addr);
     log::info!(
-        "Endpoints: GET /status  GET /telemetry/latest  GET /telemetry/history  POST /command/emergency  POST /command/deploy  POST /command/zero-altitude"
+        "Endpoints: GET /status  GET /telemetry/latest  GET /telemetry/history  POST /command/emergency  POST /command/deploy  POST /command/zero-altitude  POST /command/tx-power"
     );
 
     for request in server.incoming_requests() {
@@ -322,8 +328,9 @@ fn route(
         // ── Enable rocket debug telemetry (per-constellation SNR) ────────────
         ("POST", "/command/debug/on") => {
             if let Ok(mut s) = state.lock() {
-                s.pending_commands
-                    .push_back(protocol::GroundCommand::EnableDebugTelemetry);
+                s.pending_commands.push_back(PendingCommand::new(
+                    protocol::GroundCommand::EnableDebugTelemetry,
+                ));
                 log::info!("HTTP: queued EnableDebugTelemetry command");
             }
             (
@@ -339,8 +346,9 @@ fn route(
         // ── Disable rocket debug telemetry ───────────────────────────────────
         ("POST", "/command/debug/off") => {
             if let Ok(mut s) = state.lock() {
-                s.pending_commands
-                    .push_back(protocol::GroundCommand::DisableDebugTelemetry);
+                s.pending_commands.push_back(PendingCommand::new(
+                    protocol::GroundCommand::DisableDebugTelemetry,
+                ));
                 s.rocket_debug_snr = None;
                 log::info!("HTTP: queued DisableDebugTelemetry command");
             }
@@ -357,8 +365,9 @@ fn route(
         // ── Emergency Locate ON command ───────────────────────────────────────
         ("POST", "/command/emergency") | ("POST", "/command/emergency/on") => {
             if let Ok(mut s) = state.lock() {
-                s.pending_commands
-                    .push_back(protocol::GroundCommand::EmergencyLocate);
+                s.pending_commands.push_back(PendingCommand::new(
+                    protocol::GroundCommand::EmergencyLocate,
+                ));
                 log::info!("HTTP: queued EmergencyLocate command");
             }
             (
@@ -374,8 +383,9 @@ fn route(
         // ── Emergency Locate OFF command ──────────────────────────────────────
         ("POST", "/command/emergency/off") => {
             if let Ok(mut s) = state.lock() {
-                s.pending_commands
-                    .push_back(protocol::GroundCommand::EmergencyLocateOff);
+                s.pending_commands.push_back(PendingCommand::new(
+                    protocol::GroundCommand::EmergencyLocateOff,
+                ));
                 log::info!("HTTP: queued EmergencyLocateOff command");
             }
             (
@@ -391,8 +401,9 @@ fn route(
         // ── Deploy Ejection Charge command ────────────────────────────────────
         ("POST", "/command/deploy") => {
             if let Ok(mut s) = state.lock() {
-                s.pending_commands
-                    .push_back(protocol::GroundCommand::DeployEjectionCharge);
+                s.pending_commands.push_back(PendingCommand::new(
+                    protocol::GroundCommand::DeployEjectionCharge,
+                ));
                 log::warn!("HTTP: queued DeployEjectionCharge command");
             }
             (
@@ -409,7 +420,7 @@ fn route(
         ("POST", "/command/zero-altitude") => {
             if let Ok(mut s) = state.lock() {
                 s.pending_commands
-                    .push_back(protocol::GroundCommand::ZeroAltitude);
+                    .push_back(PendingCommand::new(protocol::GroundCommand::ZeroAltitude));
                 log::info!("HTTP: queued ZeroAltitude command");
             }
             (
@@ -421,6 +432,35 @@ fn route(
                 .unwrap_or_else(|e| error_json(&e.to_string())),
             )
         }
+
+        // ── Set Sirius/Sopdet LoRa transmit power ───────────────────────────
+        ("POST", "/command/tx-power") => match serde_json::from_str::<TxPowerBody>(body) {
+            Ok(cfg) if (2..=20).contains(&cfg.tx_power_dbm) => {
+                if let Ok(mut s) = state.lock() {
+                    s.pending_commands.push_back(PendingCommand::with_arg(
+                        protocol::GroundCommand::SetTxPower,
+                        cfg.tx_power_dbm,
+                    ));
+                    log::info!("HTTP: queued SetTxPower command: {} dBm", cfg.tx_power_dbm);
+                }
+                (
+                    200,
+                    serde_json::to_string(&CommandResponse {
+                        status: "queued",
+                        command: "SetTxPower",
+                    })
+                    .unwrap_or_else(|e| error_json(&e.to_string())),
+                )
+            }
+            Ok(cfg) => (
+                400,
+                error_json(&format!(
+                    "tx_power_dbm must be between 2 and 20, got {}",
+                    cfg.tx_power_dbm
+                )),
+            ),
+            Err(e) => (400, error_json(&format!("invalid body: {}", e))),
+        },
 
         // ── Re-survey base station position ───────────────────────────────────
         ("POST", "/resurvey") => {

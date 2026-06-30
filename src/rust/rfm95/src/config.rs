@@ -105,7 +105,7 @@ impl Default for PaConfig {
     fn default() -> Self {
         Self {
             pa_select: PaSelect::PaBoost,
-            output_power: 17,
+            output_power: 13,
         }
     }
 }

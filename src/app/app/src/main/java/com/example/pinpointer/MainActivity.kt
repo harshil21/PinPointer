@@ -19,6 +19,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,13 +35,13 @@ import com.example.pinpointer.data.remote.SopdetApi
 import com.example.pinpointer.data.repository.TelemetryRepository
 import com.example.pinpointer.ui.basestation.BaseStationScreen
 import com.example.pinpointer.ui.commands.CommandsScreen
-import com.example.pinpointer.ui.connect.ConnectScreen
 import com.example.pinpointer.ui.connect.baseUrlFor
 import com.example.pinpointer.ui.settings.AppSettings
 import com.example.pinpointer.ui.settings.SettingsScreen
 import com.example.pinpointer.ui.theme.PinPointerTheme
 import com.example.pinpointer.ui.tracking.TrackingScreen
 import com.example.pinpointer.ui.tracking.TrackingViewModel
+import com.example.pinpointer.util.ConnectionPrefs
 import com.example.pinpointer.util.OrientationTracker
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -63,17 +64,24 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainApp(settings: AppSettings, onSettingsChange: (AppSettings) -> Unit) {
-    var connectedIp by remember { mutableStateOf<String?>(null) }
-
-    if (connectedIp == null) {
-        ConnectScreen(onConnect = { ip -> connectedIp = ip })
-    } else {
-        AppNavigation(
-            ip = connectedIp!!,
-            settings = settings,
-            onSettingsChange = onSettingsChange
-        )
+    val context = LocalContext.current
+    val prefs = remember(context) { ConnectionPrefs(context) }
+    var baseStationHost by remember {
+        mutableStateOf(prefs.lastHost() ?: "192.168.1.100")
     }
+
+    AppNavigation(
+        ip = baseStationHost,
+        settings = settings,
+        onSettingsChange = onSettingsChange,
+        onBaseStationHostChange = { host ->
+            val normalized = ConnectionPrefs.normalize(host)
+            if (ConnectionPrefs.isValidHostOrIp(normalized)) {
+                prefs.saveHost(normalized)
+                baseStationHost = normalized
+            }
+        }
+    )
 }
 
 private data class NavDestination(val label: String, val icon: ImageVector)
@@ -82,7 +90,8 @@ private data class NavDestination(val label: String, val icon: ImageVector)
 fun AppNavigation(
     ip: String,
     settings: AppSettings,
-    onSettingsChange: (AppSettings) -> Unit
+    onSettingsChange: (AppSettings) -> Unit,
+    onBaseStationHostChange: (String) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -100,15 +109,26 @@ fun AppNavigation(
             .create(SopdetApi::class.java)
     }
 
-    val repository = remember(api) { TelemetryRepository(api) }
+    val repository = remember(api, ip) { TelemetryRepository(api, ip) }
     val orientationTracker = remember(context) { OrientationTracker(context) }
+    DisposableEffect(orientationTracker) {
+        orientationTracker.start()
+        onDispose { orientationTracker.stop() }
+    }
     val viewModel = remember(repository, orientationTracker) {
         TrackingViewModel(repository, orientationTracker)
+    }
+    DisposableEffect(repository) {
+        onDispose { repository.stopPolling() }
     }
 
     // Keep the ViewModel's forceRssiOnly in sync with settings
     LaunchedEffect(settings.forceRssiOnly) {
         viewModel.setForceRssiOnly(settings.forceRssiOnly)
+    }
+
+    LaunchedEffect(settings.txPowerDbm) {
+        viewModel.setTxPowerDbm(settings.txPowerDbm)
     }
 
     val destinations = listOf(
@@ -151,7 +171,11 @@ fun AppNavigation(
             when (selectedTab) {
                 0 -> TrackingScreen(viewModel)
                 1 -> CommandsScreen(viewModel)
-                2 -> BaseStationScreen(viewModel)
+                2 -> BaseStationScreen(
+                    viewModel = viewModel,
+                    baseStationHost = ip,
+                    onConnect = onBaseStationHostChange
+                )
                 3 -> SettingsScreen(
                     settings = settings,
                     onSettingsChange = onSettingsChange,
@@ -159,6 +183,14 @@ fun AppNavigation(
                         scope.launch {
                             try {
                                 viewModel.repository.setSvinDuration(duration)
+                            } catch (_: Exception) {
+                            }
+                        }
+                    },
+                    onTxPowerApply = { dbm ->
+                        scope.launch {
+                            try {
+                                viewModel.repository.setTxPower(dbm)
                             } catch (_: Exception) {
                             }
                         }

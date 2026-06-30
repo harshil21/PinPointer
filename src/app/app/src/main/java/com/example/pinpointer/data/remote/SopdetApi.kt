@@ -29,6 +29,9 @@ interface SopdetApi {
     @POST("/command/zero-altitude")
     suspend fun zeroAltitude(): CommandResponse
 
+    @POST("/command/tx-power")
+    suspend fun setTxPower(@retrofit2.http.Body body: com.example.pinpointer.data.model.TxPowerBody): CommandResponse
+
     @POST("/command/debug/on")
     suspend fun enableDebugTelemetry(): CommandResponse
 
