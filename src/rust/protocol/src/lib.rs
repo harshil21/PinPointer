@@ -155,6 +155,8 @@ pub enum GroundCommand {
     EnableDebugTelemetry = 4,
     /// Stop sending debug packets.
     DisableDebugTelemetry = 5,
+    /// Treat the rocket's current pressure-derived altitude as the new zero.
+    ZeroAltitude = 6,
 }
 
 impl GroundCommand {
@@ -166,6 +168,7 @@ impl GroundCommand {
             3 => GroundCommand::EmergencyLocateOff,
             4 => GroundCommand::EnableDebugTelemetry,
             5 => GroundCommand::DisableDebugTelemetry,
+            6 => GroundCommand::ZeroAltitude,
             _ => GroundCommand::None,
         }
     }
@@ -185,6 +188,7 @@ impl core::fmt::Display for GroundCommand {
             GroundCommand::EmergencyLocateOff => f.write_str("EmergencyLocateOff"),
             GroundCommand::EnableDebugTelemetry => f.write_str("EnableDebugTelemetry"),
             GroundCommand::DisableDebugTelemetry => f.write_str("DisableDebugTelemetry"),
+            GroundCommand::ZeroAltitude => f.write_str("ZeroAltitude"),
         }
     }
 }
@@ -477,7 +481,7 @@ mod tests {
 
     #[test]
     fn ground_command_roundtrip() {
-        for v in 0u8..=5 {
+        for v in 0u8..=6 {
             assert_eq!(GroundCommand::from_u8(v).as_u8(), v);
         }
     }
@@ -521,6 +525,13 @@ mod tests {
         );
         assert_eq!(GroundCommand::EnableDebugTelemetry.as_u8(), 4);
         assert_eq!(GroundCommand::DisableDebugTelemetry.as_u8(), 5);
+    }
+
+    #[test]
+    fn ground_command_zero_altitude() {
+        assert_eq!(GroundCommand::from_u8(6), GroundCommand::ZeroAltitude);
+        assert_eq!(GroundCommand::ZeroAltitude.as_u8(), 6);
+        assert_eq!(GroundCommand::ZeroAltitude.to_string(), "ZeroAltitude");
     }
 
     #[test]

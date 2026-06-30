@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CrisisAlert
+import androidx.compose.material.icons.rounded.Height
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
@@ -56,6 +57,7 @@ fun CommandsScreen(viewModel: TrackingViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeployDialog by remember { mutableStateOf(false) }
     var showResurveyDialog by remember { mutableStateOf(false) }
+    var showZeroAltitudeDialog by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -86,7 +88,19 @@ fun CommandsScreen(viewModel: TrackingViewModel) {
                     title = "Re-Survey Base Station",
                     description = "Restart GPS survey-in after moving the base station. Survey takes approximately 150 seconds to converge to a fixed position.",
                     buttonLabel = "Re-Survey",
+                    showQueuedOnClick = false,
                     onSend = { showResurveyDialog = true }
+                )
+            }
+
+            item {
+                SimpleCommandCard(
+                    icon = Icons.Rounded.Height,
+                    title = "Zero Rocket Altitude",
+                    description = "Use the rocket's current pressure altitude as the new zero reference. Use this while Sirius is still on the pad.",
+                    buttonLabel = "Zero Altitude",
+                    showQueuedOnClick = false,
+                    onSend = { showZeroAltitudeDialog = true }
                 )
             }
 
@@ -168,6 +182,34 @@ fun CommandsScreen(viewModel: TrackingViewModel) {
         )
     }
 
+    if (showZeroAltitudeDialog) {
+        AlertDialog(
+            onDismissRequest = { showZeroAltitudeDialog = false },
+            icon = { Icon(Icons.Rounded.Height, contentDescription = null) },
+            title = { Text("Zero Rocket Altitude?") },
+            text = {
+                Text(
+                    "This queues a LoRa command for Sirius to treat its current pressure altitude as 0 m. Only use it while the rocket is stationary on the pad.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    scope.launch {
+                        try {
+                            viewModel.repository.zeroAltitude()
+                        } catch (_: Exception) {
+                        }
+                    }
+                    showZeroAltitudeDialog = false
+                }) { Text("Zero Altitude") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showZeroAltitudeDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     // Deploy confirmation
     if (showDeployDialog) {
         AlertDialog(
@@ -216,6 +258,7 @@ private fun SimpleCommandCard(
     title: String,
     description: String,
     buttonLabel: String,
+    showQueuedOnClick: Boolean = true,
     onSend: () -> Unit
 ) {
     var sent by remember { mutableStateOf(false) }
@@ -263,8 +306,10 @@ private fun SimpleCommandCard(
                 Spacer(modifier = Modifier.weight(1f))
                 FilledTonalButton(onClick = {
                     onSend()
-                    sent = true
-                    scope.launch { delay(2000); sent = false }
+                    if (showQueuedOnClick) {
+                        sent = true
+                        scope.launch { delay(2000); sent = false }
+                    }
                 }) {
                     Text(buttonLabel)
                 }

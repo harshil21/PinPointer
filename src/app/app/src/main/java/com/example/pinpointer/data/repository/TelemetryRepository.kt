@@ -58,6 +58,7 @@ class TelemetryRepository(private val api: SopdetApi) {
     suspend fun sendEmergencyLocate() = api.sendEmergencyLocate()
     suspend fun stopEmergencyLocate() = api.stopEmergencyLocate()
     suspend fun sendDeployEjection() = api.sendDeployEjection()
+    suspend fun zeroAltitude() = api.zeroAltitude()
     suspend fun requestResurvey() = api.requestResurvey()
     suspend fun enableDebugTelemetry() = api.enableDebugTelemetry()
     suspend fun disableDebugTelemetry() = api.disableDebugTelemetry()

@@ -212,6 +212,7 @@ pub fn run_radio_thread(
     rx_log_tx: mpsc::Sender<Vec<u8>>,
     emergency_flag: Arc<AtomicBool>,
     deploy_flag: Arc<AtomicBool>,
+    zero_altitude_flag: Arc<AtomicBool>,
     contact_lost_flag: Arc<AtomicBool>,
     boot: Instant,
 ) {
@@ -263,6 +264,7 @@ pub fn run_radio_thread(
                     &rx_log_tx,
                     &emergency_flag,
                     &deploy_flag,
+                    &zero_altitude_flag,
                     &debug_mode,
                     &mut assembler,
                 );
@@ -337,6 +339,7 @@ fn handle_received(
     rx_log_tx: &mpsc::Sender<Vec<u8>>,
     emergency_flag: &Arc<AtomicBool>,
     deploy_flag: &Arc<AtomicBool>,
+    zero_altitude_flag: &Arc<AtomicBool>,
     debug_mode: &Arc<AtomicBool>,
     assembler: &mut FragmentAssembler,
 ) -> bool {
@@ -390,6 +393,11 @@ fn handle_received(
                             log::info!("[radio] Debug telemetry DISABLED");
                             debug_mode.store(false, Ordering::Relaxed);
                         }
+
+                        GroundCommand::ZeroAltitude => {
+                            log::info!("[radio] ZeroAltitude command received");
+                            zero_altitude_flag.store(true, Ordering::Relaxed);
+                        }
                     }
 
                     // Log the raw bytes.
@@ -413,8 +421,8 @@ fn handle_received(
                         let _ = rtk_tx.send(assembled);
                     }
 
-                    // Only log the final fragment so `rx_packet_hex` in the
-                    // CSV reflects the packet that completed the batch.
+                    // Only send the final fragment to the main thread so
+                    // packet-log notifications track completed RTCM batches.
                     if is_last {
                         let _ = rx_log_tx.send(payload.to_vec());
                     }

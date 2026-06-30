@@ -26,6 +26,9 @@ interface SopdetApi {
     @POST("/command/deploy")
     suspend fun sendDeployEjection(): CommandResponse
 
+    @POST("/command/zero-altitude")
+    suspend fun zeroAltitude(): CommandResponse
+
     @POST("/command/debug/on")
     suspend fun enableDebugTelemetry(): CommandResponse
 

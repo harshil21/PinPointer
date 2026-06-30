@@ -142,7 +142,7 @@ object CoordinateMath {
      */
     fun estimateDistanceFriis(
         rssi: Int,
-        txPowerDbm: Double = 17.0,
+        txPowerDbm: Double = 20.0,
         freqMhz: Double = 915.0,
         gTxDbi: Double = 2.0,
         gRxDbi: Double = 8.4

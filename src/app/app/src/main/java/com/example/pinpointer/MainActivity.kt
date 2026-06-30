@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.FlightTakeoff
 import androidx.compose.material.icons.rounded.Router
 import androidx.compose.material.icons.rounded.Settings
@@ -37,7 +36,6 @@ import com.example.pinpointer.ui.basestation.BaseStationScreen
 import com.example.pinpointer.ui.commands.CommandsScreen
 import com.example.pinpointer.ui.connect.ConnectScreen
 import com.example.pinpointer.ui.connect.baseUrlFor
-import com.example.pinpointer.ui.data.DataScreen
 import com.example.pinpointer.ui.settings.AppSettings
 import com.example.pinpointer.ui.settings.SettingsScreen
 import com.example.pinpointer.ui.theme.PinPointerTheme
@@ -115,7 +113,6 @@ fun AppNavigation(
 
     val destinations = listOf(
         NavDestination("Tracking", Icons.Rounded.FlightTakeoff),
-        NavDestination("Data", Icons.Rounded.BarChart),
         NavDestination("Commands", Icons.Rounded.Terminal),
         NavDestination("Base Station", Icons.Rounded.Router),
         NavDestination("Settings", Icons.Rounded.Settings)
@@ -153,10 +150,9 @@ fun AppNavigation(
         ) {
             when (selectedTab) {
                 0 -> TrackingScreen(viewModel)
-                1 -> DataScreen(viewModel)
-                2 -> CommandsScreen(viewModel)
-                3 -> BaseStationScreen(viewModel)
-                4 -> SettingsScreen(
+                1 -> CommandsScreen(viewModel)
+                2 -> BaseStationScreen(viewModel)
+                3 -> SettingsScreen(
                     settings = settings,
                     onSettingsChange = onSettingsChange,
                     onSvinApply = { duration ->

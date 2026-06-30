@@ -168,6 +168,20 @@ wheels = [
 ]
 
 [[package]]
+name = "firm-client"
+version = "1.2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8f/15/722cf16b9313bed59b386f39dff341be43b750c37a5b52de132c93bd5bc7/firm_client-1.2.2.tar.gz", hash = "sha256:bcd54e8f5f477a3a97932e12d9c4183ac2b9c835a65bfa331748b48209963da8", size = 60502, upload-time = "2026-03-24T23:55:03.115Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/10/eb/2f89aa0c552d7ca033848072e547f8f791176372c70c5fe8f0b0fbe23954/firm_client-1.2.2-cp314-cp314-manylinux_2_31_aarch64.whl", hash = "sha256:c70114e91668c32122055db96e4b8310d95c32d661f204f335919624bc0808d3", size = 428546, upload-time = "2026-03-24T23:55:00.783Z" },
+    { url = "https://files.pythonhosted.org/packages/58/2b/86b6a2654945c033d467ebc72cceafda575b88c0c7f7d8a3fd0f6c097487/firm_client-1.2.2-cp314-cp314-manylinux_2_31_x86_64.whl", hash = "sha256:4cb1e7922bf9e936eab6dd126e0ac20d8aae10cae651389cfa0493a60b987fc7", size = 449600, upload-time = "2026-03-24T23:55:14.517Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/07/12670198b886aa084e201b11de50e598c439859a4133edd0a37c166fb1dd/firm_client-1.2.2-cp314-cp314-win_amd64.whl", hash = "sha256:97331eae42acd622626e54915576ba8a7412f40f7d243ce8f03565eef1705856", size = 357168, upload-time = "2026-03-24T23:54:59.44Z" },
+    { url = "https://files.pythonhosted.org/packages/84/5c/44d300dc7f3a3c27e81f6697163f83f7f0569ceca8c89900415fcee5de17/firm_client-1.2.2-cp314-cp314t-manylinux_2_31_aarch64.whl", hash = "sha256:e191ad8968210d09e0cfa34060165547d31ec131be4771709877d91c780d2a79", size = 428149, upload-time = "2026-03-24T23:55:12.061Z" },
+    { url = "https://files.pythonhosted.org/packages/fd/be/86baacd516d5d6806aa039c5f54d2cf76b60ce55868613ee64f05581322a/firm_client-1.2.2-cp314-cp314t-manylinux_2_31_x86_64.whl", hash = "sha256:cec570e6f2d6bca6d26ebcda77b16bc2f70934fc0e86e392fd0489ee834ce5d1", size = 450195, upload-time = "2026-03-24T23:55:07.14Z" },
+    { url = "https://files.pythonhosted.org/packages/6e/14/7b2beb2c6b86f21ba22dab0caed740f3ece0f7a1fe1bd8da12758dc6aaa4/firm_client-1.2.2-cp314-cp314t-win_amd64.whl", hash = "sha256:ed2b5cbf0e7f1b43d90f1f8bec17723093c03e25572729a45593198310180176", size = 357228, upload-time = "2026-03-24T23:54:58.227Z" },
+]
+
+[[package]]
 name = "fonttools"
 version = "4.62.1"
 source = { registry = "https://pypi.org/simple" }
@@ -322,6 +336,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "adafruit-circuitpython-rfm" },
     { name = "csxcad", marker = "platform_machine == 'x86_64'" },
+    { name = "firm-client" },
     { name = "matplotlib", marker = "platform_machine == 'x86_64'" },
     { name = "openems", marker = "platform_machine == 'x86_64'" },
     { name = "polars", marker = "platform_machine == 'x86_64'" },
@@ -334,6 +349,7 @@ dependencies = [
 requires-dist = [
     { name = "adafruit-circuitpython-rfm", git = "https://github.com/harshil21/adafruit_rfm_spidev.git?branch=main" },
     { name = "csxcad", marker = "platform_machine == 'x86_64'", path = "wheels/csxcad-0.6.3.post1.dev93+g28ac61481-cp314-cp314-linux_x86_64.whl" },
+    { name = "firm-client" },
     { name = "matplotlib", marker = "platform_machine == 'x86_64'" },
     { name = "openems", marker = "platform_machine == 'x86_64'", path = "wheels/openems-0.0.36.post1.dev133+gb0b835155-cp314-cp314-linux_x86_64.whl" },
     { name = "polars", marker = "platform_machine == 'x86_64'" },

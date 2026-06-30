@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 enum class SignalState {
@@ -37,6 +40,7 @@ data class TrackingUiState(
     /** Positive = tilt phone up. */
     val deviationElevation: Double = 0.0,
     val distanceIsGps: Boolean = false,
+    val targetSource: String = "NO TARGET",
     /** Settings toggle: use RSSI scan even when GPS is available. */
     val isForceRssiMode: Boolean = false,
     // ── RSSI direction-finding ────────────────────────────────────────────────
@@ -53,7 +57,8 @@ class TrackingViewModel(
 ) : ViewModel() {
 
     private val rssiDirectionFinder = RssiDirectionFinder()
-    private var lastSeenSeq: Int = -1
+    private var lastContactSeq: Int = -1
+    private var lastRssiSampleSeq: Int = -1
 
     /**
      * Local phone-side timestamp (ms) of the last time we observed a new
@@ -78,7 +83,7 @@ class TrackingViewModel(
      */
     fun recalibrateRssiTracking() {
         rssiDirectionFinder.clear()
-        lastSeenSeq = -1
+        lastRssiSampleSeq = -1
     }
 
     init {
@@ -103,8 +108,10 @@ class TrackingViewModel(
         val now = System.currentTimeMillis()
         // Advance local contact clock on every NEW sequence number so the
         // freshness check is immune to clock skew between Sopdet and the phone.
-        if (telemetry != null && telemetry.sequenceNum != lastSeenSeq) {
+        val hasNewTelemetry = telemetry != null && telemetry.sequenceNum != lastContactSeq
+        if (hasNewTelemetry) {
             localLastContactMs = now
+            lastContactSeq = telemetry.sequenceNum
         }
         val secondsSince =
             if (localLastContactMs == 0L) 9999L
@@ -148,25 +155,15 @@ class TrackingViewModel(
 
         // ── RSSI finder ────────────────────────────────────────────────────────
         when (signalState) {
-            SignalState.GPS_FIX -> {
-                rssiDirectionFinder.clear()
-                // Note: lastSeenSeq is intentionally NOT reset here.
-                // Resetting it to -1 would cause every combine emission to
-                // satisfy (seq != -1), perpetually refreshing localLastContactMs
-                // for a stale cached packet and preventing LOST_CONTACT from
-                // triggering if the rocket goes silent while a GPS fix is held.
-                // Any real packet after the GPS fix is released will have a
-                // different sequence number, so RSSI sampling still works correctly.
-            }
-
+            SignalState.GPS_FIX,
             SignalState.RSSI_ONLY -> {
-                if (telemetry != null && telemetry.sequenceNum != lastSeenSeq) {
+                if (telemetry != null && telemetry.sequenceNum != lastRssiSampleSeq) {
                     rssiDirectionFinder.addSample(
                         orientation.cameraAzimuth,
                         orientation.cameraElevation,
                         telemetry.rssi
                     )
-                    lastSeenSeq = telemetry.sequenceNum
+                    lastRssiSampleSeq = telemetry.sequenceNum
                 }
             }
 
@@ -177,10 +174,26 @@ class TrackingViewModel(
         val rssiHasEst = rssiEst != null
 
         // ── Final target / deviation ───────────────────────────────────────────
-        val (finalAz, finalEl) = when {
-            distanceIsGps -> Pair(targetAzimuth, targetElevation)
-            rssiHasEst -> Pair(rssiEst!!.first.toDouble(), rssiEst.second.toDouble())
-            else -> Pair(0.0, 0.0)
+        val fusionWeight = if (distanceIsGps && rssiHasEst) {
+            (rssiDirectionFinder.coverage.coerceIn(0f, 0.6f) * 0.55f).toDouble()
+        } else {
+            0.0
+        }
+        val (finalAz, finalEl, targetSource) = if (rssiEst != null) {
+            when {
+                distanceIsGps && fusionWeight > 0.05 -> Triple(
+                    blendAngles(targetAzimuth, rssiEst.first.toDouble(), fusionWeight),
+                    targetElevation * (1.0 - fusionWeight) + rssiEst.second.toDouble() * fusionWeight,
+                    "GPS + RSSI"
+                )
+
+                distanceIsGps -> Triple(targetAzimuth, targetElevation, "GPS")
+                else -> Triple(rssiEst.first.toDouble(), rssiEst.second.toDouble(), "RSSI")
+            }
+        } else if (distanceIsGps) {
+            Triple(targetAzimuth, targetElevation, "GPS")
+        } else {
+            Triple(0.0, 0.0, "NO TARGET")
         }
         val hasTarget = distanceIsGps || rssiHasEst
         val devAz = if (hasTarget)
@@ -199,6 +212,7 @@ class TrackingViewModel(
             deviationAzimuth = devAz,
             deviationElevation = devEl,
             distanceIsGps = distanceIsGps,
+            targetSource = targetSource,
             isForceRssiMode = forceRssi,
             rssiHasEstimate = rssiHasEst,
             rssiScanCoverage = rssiDirectionFinder.coverage,
@@ -207,4 +221,13 @@ class TrackingViewModel(
             rssiSampleCount = rssiDirectionFinder.sampleCount
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrackingUiState())
+}
+
+private fun blendAngles(primaryDeg: Double, secondaryDeg: Double, secondaryWeight: Double): Double {
+    val primaryWeight = 1.0 - secondaryWeight.coerceIn(0.0, 1.0)
+    val a = Math.toRadians(primaryDeg)
+    val b = Math.toRadians(secondaryDeg)
+    val x = primaryWeight * cos(a) + secondaryWeight * cos(b)
+    val y = primaryWeight * sin(a) + secondaryWeight * sin(b)
+    return (Math.toDegrees(atan2(y, x)) + 360.0) % 360.0
 }

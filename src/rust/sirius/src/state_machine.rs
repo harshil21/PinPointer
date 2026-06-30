@@ -140,7 +140,16 @@ impl StateChecker {
     ///
     /// Returns `true` if the state changed as a result of this call.
     pub fn update(&mut self, data: &ProcessedFIRMData) -> bool {
-        let alt = data.est_position_z_meters;
+        self.update_with_altitude(data, data.est_position_z_meters)
+    }
+
+    /// Feed a new data packet using an already-zeroed pressure altitude.
+    ///
+    /// Sirius can re-zero altitude while sitting on the pad. The FIRM packet
+    /// still contains the raw pressure-reference altitude, so callers that
+    /// maintain a zero offset use this method to keep state transitions aligned
+    /// with the displayed and downlinked altitude.
+    pub fn update_with_altitude(&mut self, data: &ProcessedFIRMData, alt: f32) -> bool {
         let vel = data.est_velocity_z_meters_per_s;
         // raw_rotated_acceleration_z_gs is in g-units (includes reaction to gravity).
         let accel_z = data.raw_rotated_acceleration_z_gs;

@@ -176,6 +176,8 @@ impl Default for FlightData {
 /// everything else (logging, pyro firing, GPS updates, etc.).
 pub struct DataProcessor {
     checker: StateChecker,
+    altitude_zero_offset_m: f32,
+    last_raw_altitude_m: f32,
 }
 
 impl DataProcessor {
@@ -183,6 +185,8 @@ impl DataProcessor {
     pub fn new() -> Self {
         DataProcessor {
             checker: StateChecker::new(),
+            altitude_zero_offset_m: 0.0,
+            last_raw_altitude_m: 0.0,
         }
     }
 
@@ -199,13 +203,16 @@ impl DataProcessor {
 
         for pkt in packets {
             // ── State machine ─────────────────────────────────────────────────
-            if self.checker.update(pkt) {
+            self.last_raw_altitude_m = pkt.est_position_z_meters;
+            let zeroed_altitude_m = pkt.est_position_z_meters - self.altitude_zero_offset_m;
+
+            if self.checker.update_with_altitude(pkt, zeroed_altitude_m) {
                 any_state_changed = true;
             }
 
             // ── FIRM: Kalman estimates ────────────────────────────────────────
             data.timestamp_s = pkt.timestamp_seconds;
-            data.altitude_m = pkt.est_position_z_meters;
+            data.altitude_m = zeroed_altitude_m;
             data.velocity_mps = pkt.est_velocity_z_meters_per_s;
 
             // ── FIRM: calibrated body-frame acceleration ──────────────────────
@@ -258,6 +265,17 @@ impl DataProcessor {
     /// velocity or apogee at any time without calling `update`).
     pub fn checker(&self) -> &StateChecker {
         &self.checker
+    }
+
+    /// Make the latest pressure-derived altitude read as zero from now on.
+    pub fn zero_altitude_reference(&mut self, data: &mut FlightData) {
+        self.altitude_zero_offset_m = self.last_raw_altitude_m;
+        data.altitude_m = 0.0;
+        data.apogee_m = data.apogee_m.max(0.0);
+        log::info!(
+            "Altitude zeroed at raw pressure altitude {:.4} m",
+            self.altitude_zero_offset_m
+        );
     }
 }
 

@@ -18,6 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Context;
 use serde::Serialize;
+use serde::Serializer;
 
 use crate::data_processor::FlightData;
 
@@ -45,49 +46,72 @@ pub struct LogEntry {
     pub flight_state: char,
 
     // ── FIRM: Kalman-filtered estimates ───────────────────────────────────────
+    #[serde(serialize_with = "serialize_f32_4")]
     pub altitude_m: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub velocity_z_mps: f32,
 
     // ── FIRM: calibrated (rotated) body-frame acceleration (g) ────────────────
+    #[serde(serialize_with = "serialize_f32_4")]
     pub accel_x_gs: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub accel_y_gs: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub accel_z_gs: f32,
 
     // ── FIRM: raw (unrotated) accelerometer readings (g) ──────────────────────
+    #[serde(serialize_with = "serialize_f32_4")]
     pub raw_accel_x_gs: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub raw_accel_y_gs: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub raw_accel_z_gs: f32,
 
     // ── FIRM: gyroscope (°/s) ─────────────────────────────────────────────────
+    #[serde(serialize_with = "serialize_f32_4")]
     pub gyro_x_dps: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub gyro_y_dps: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub gyro_z_dps: f32,
 
     // ── FIRM: magnetometer (µT) ───────────────────────────────────────────────
+    #[serde(serialize_with = "serialize_f32_4")]
     pub mag_x_ut: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub mag_y_ut: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub mag_z_ut: f32,
 
     // ── FIRM: environment ─────────────────────────────────────────────────────
+    #[serde(serialize_with = "serialize_f32_4")]
     pub temperature_c: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub pressure_pa: f32,
 
     // ── FIRM: derived scalars ─────────────────────────────────────────────────
+    #[serde(serialize_with = "serialize_f32_4")]
     pub tilt_deg: f32,
 
     // ── FIRM: attitude quaternion (w, x, y, z) ────────────────────────────────
+    #[serde(serialize_with = "serialize_f32_4")]
     pub quat_w: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub quat_x: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub quat_y: f32,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub quat_z: f32,
 
     // ── GPS / RTK ─────────────────────────────────────────────────────────────
     pub gps_lat: f64,
     pub gps_lon: f64,
+    #[serde(serialize_with = "serialize_f32_4")]
     pub gps_alt_m: f32,
     /// Full fix-type string (e.g. "RTK-Fixed", "DGPS", "GPS", "NoFix").
     pub rtk_fix: String,
     /// Horizontal dilution of precision.
+    #[serde(serialize_with = "serialize_f32_4")]
     pub hdop: f32,
     /// Number of satellites used in the position solution.
     pub satellites_used: u8,
@@ -100,23 +124,16 @@ pub struct LogEntry {
     pub gps_snr_qzss: u8,
 
     // ── Pyro ──────────────────────────────────────────────────────────────────
+    #[serde(serialize_with = "serialize_bool_tf")]
     pub pyro_deployed: bool,
+    #[serde(serialize_with = "serialize_bool_tf")]
     pub pyro_continuity: bool,
-
-    // ── Radio: packet mirrors ─────────────────────────────────────────────────
-    /// Lower-case hex encoding of the last received uplink / fragment bytes.
-    /// Empty string if nothing has been received yet.
-    pub rx_packet_hex: String,
 }
 
 // ── build_log_entry ───────────────────────────────────────────────────────────
 
-/// Build a [`LogEntry`] from the current [`FlightData`] snapshot plus the
-/// raw bytes of the most recently received radio packet.
-///
-/// `rx_hex` should already be hex-encoded; pass an empty string if no
-/// packet has been received yet.
-pub fn build_log_entry(data: &FlightData, rx_hex: &str) -> LogEntry {
+/// Build a [`LogEntry`] from the current [`FlightData`] snapshot.
+pub fn build_log_entry(data: &FlightData) -> LogEntry {
     LogEntry {
         timestamp_ns: unix_epoch_nanos(),
         flight_state: data.flight_state.abbrev(),
@@ -164,9 +181,22 @@ pub fn build_log_entry(data: &FlightData, rx_hex: &str) -> LogEntry {
 
         pyro_deployed: data.pyro_deployed,
         pyro_continuity: data.pyro_continuity,
-
-        rx_packet_hex: rx_hex.to_string(),
     }
+}
+
+fn serialize_f32_4<S>(value: &f32, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let truncated = (*value * 10_000.0).trunc() / 10_000.0;
+    serializer.serialize_str(&format!("{:.4}", truncated))
+}
+
+fn serialize_bool_tf<S>(value: &bool, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(if *value { "T" } else { "F" })
 }
 
 /// Nanoseconds elapsed since the Unix epoch (UTC). Returns 0 if the system
@@ -319,7 +349,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let entry = build_log_entry(&sample_flight_data(), "");
+        let entry = build_log_entry(&sample_flight_data());
         let now_ns_upper = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -341,7 +371,7 @@ mod tests {
             let mut wtr = csv::WriterBuilder::new()
                 .has_headers(true)
                 .from_writer(&mut buf);
-            wtr.serialize(build_log_entry(&sample_flight_data(), ""))
+            wtr.serialize(build_log_entry(&sample_flight_data()))
                 .expect("serialise log entry");
             wtr.flush().unwrap();
         }
@@ -354,12 +384,12 @@ mod tests {
             "timestamp_ns missing: {header}"
         );
         assert!(
-            cols.contains(&"rx_packet_hex"),
-            "rx_packet_hex missing: {header}"
-        );
-        assert!(
             cols.contains(&"gps_snr_gps"),
             "per-constellation column missing: {header}"
+        );
+        assert!(
+            !cols.contains(&"rx_packet_hex"),
+            "rx_packet_hex column must be removed: {header}"
         );
         assert!(
             !cols.contains(&"tx_packet_hex"),
@@ -371,5 +401,37 @@ mod tests {
             !cols.contains(&"gps_snr"),
             "gps_snr column must be removed: {header}"
         );
+    }
+
+    #[test]
+    fn csv_formats_precision_and_pyro_flags() {
+        let mut sample = sample_flight_data();
+        sample.altitude_m = 12.34567;
+        sample.velocity_mps = -4.56789;
+        sample.pyro_deployed = false;
+        sample.pyro_continuity = true;
+
+        let mut buf: Vec<u8> = Vec::new();
+        {
+            let mut wtr = csv::WriterBuilder::new()
+                .has_headers(true)
+                .from_writer(&mut buf);
+            wtr.serialize(build_log_entry(&sample)).expect("serialise");
+            wtr.flush().unwrap();
+        }
+
+        let text = String::from_utf8(buf).expect("utf-8");
+        let mut lines = text.lines();
+        let header: Vec<&str> = lines.next().expect("header").split(',').collect();
+        let row: Vec<&str> = lines.next().expect("row").split(',').collect();
+        let value = |name: &str| {
+            let idx = header.iter().position(|col| *col == name).unwrap();
+            row[idx]
+        };
+
+        assert_eq!(value("altitude_m"), "12.3456");
+        assert_eq!(value("velocity_z_mps"), "-4.5678");
+        assert_eq!(value("pyro_deployed"), "F");
+        assert_eq!(value("pyro_continuity"), "T");
     }
 }

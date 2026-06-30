@@ -13,6 +13,7 @@
 //! | POST   | `/command/deploy`     | Queue a `DeployEjectionCharge` command           |
 //! | POST   | `/command/debug/on`   | Enable per-constellation SNR debug downlink      |
 //! | POST   | `/command/debug/off`  | Disable per-constellation SNR debug downlink     |
+//! | POST   | `/command/zero-altitude` | Zero Sirius pressure altitude                 |
 //! | POST   | `/resurvey`           | Restart GPS survey-in                            |
 //! | POST   | `/config/svin`        | Set survey-in duration `{"duration_s": N}`       |
 
@@ -150,7 +151,7 @@ pub fn run_server(addr: &str, state: Arc<Mutex<AppState>>, logger: Logger) {
 
     log::info!("HTTP server listening on http://{}", addr);
     log::info!(
-        "Endpoints: GET /status  GET /telemetry/latest  GET /telemetry/history  POST /command/emergency  POST /command/deploy"
+        "Endpoints: GET /status  GET /telemetry/latest  GET /telemetry/history  POST /command/emergency  POST /command/deploy  POST /command/zero-altitude"
     );
 
     for request in server.incoming_requests() {
@@ -399,6 +400,23 @@ fn route(
                 serde_json::to_string(&CommandResponse {
                     status: "queued",
                     command: "DeployEjectionCharge",
+                })
+                .unwrap_or_else(|e| error_json(&e.to_string())),
+            )
+        }
+
+        // ── Zero Sirius pressure altitude ───────────────────────────────────
+        ("POST", "/command/zero-altitude") => {
+            if let Ok(mut s) = state.lock() {
+                s.pending_commands
+                    .push_back(protocol::GroundCommand::ZeroAltitude);
+                log::info!("HTTP: queued ZeroAltitude command");
+            }
+            (
+                200,
+                serde_json::to_string(&CommandResponse {
+                    status: "queued",
+                    command: "ZeroAltitude",
                 })
                 .unwrap_or_else(|e| error_json(&e.to_string())),
             )

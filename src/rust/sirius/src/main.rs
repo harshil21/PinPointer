@@ -204,6 +204,7 @@ fn main() -> anyhow::Result<()> {
     // Atomic signals from the radio thread to the main thread.
     let emergency_flag = Arc::new(AtomicBool::new(false));
     let deploy_flag = Arc::new(AtomicBool::new(false));
+    let zero_altitude_flag = Arc::new(AtomicBool::new(false));
     let contact_lost_flag = Arc::new(AtomicBool::new(false));
 
     // ── Spawn radio thread ────────────────────────────────────────────────────
@@ -211,12 +212,15 @@ fn main() -> anyhow::Result<()> {
         let rfd = Arc::clone(&radio_flight_data);
         let ef = Arc::clone(&emergency_flag);
         let df = Arc::clone(&deploy_flag);
+        let zaf = Arc::clone(&zero_altitude_flag);
         let clf = Arc::clone(&contact_lost_flag);
 
         thread::Builder::new()
             .name("radio".to_string())
             .spawn(move || {
-                run_radio_thread(radio, rfd, rtk_tx, tx_log_tx, rx_log_tx, ef, df, clf, boot)
+                run_radio_thread(
+                    radio, rfd, rtk_tx, tx_log_tx, rx_log_tx, ef, df, zaf, clf, boot,
+                )
             })
             .context("Cannot spawn radio thread")?;
     } else {
@@ -228,9 +232,6 @@ fn main() -> anyhow::Result<()> {
     // ── Flight state ──────────────────────────────────────────────────────────
     let mut processor = DataProcessor::new();
     let mut flight_data = FlightData::default();
-
-    // Most-recently observed RX packet bytes (hex-encoded for the CSV).
-    let mut last_rx_hex = String::new();
 
     // Rate-limit the per-constellation SNR info log to once per second.
     let mut last_snr_log = Instant::now()
@@ -256,6 +257,11 @@ fn main() -> anyhow::Result<()> {
             false
         };
 
+        if zero_altitude_flag.swap(false, Ordering::Relaxed) {
+            processor.zero_altitude_reference(&mut flight_data);
+            had_new_data = true;
+        }
+
         // ── 2. GPS data (non-blocking drain) ─────────────────────────────────────
         if let Some(gps_port) = gps.as_mut() {
             while let Some(msg) = gps_port.try_get_gps_data() {
@@ -277,9 +283,6 @@ fn main() -> anyhow::Result<()> {
                         had_new_data = true;
                     }
                     WireMessage::NmeaGsv(gsv) => {
-                        // Always update the overall average.
-                        flight_data.gps_snr = gsv.avg_snr();
-                        // Update per-constellation field when SNR is non-zero.
                         let avg = gsv.avg_snr();
                         if avg > 0 {
                             use rtk::GsvConstellation::*;
@@ -291,6 +294,7 @@ fn main() -> anyhow::Result<()> {
                                 Qzss => flight_data.gps_snr_qzss = avg,
                                 _ => {}
                             }
+                            flight_data.gps_snr = average_active_snr(&flight_data);
                         }
                         had_new_data = true;
                     }
@@ -351,14 +355,13 @@ fn main() -> anyhow::Result<()> {
         // CSV log no longer mirrors them — we already write the same
         // information from the structured fields on every row.
         while tx_log_rx.try_recv().is_ok() {}
-        if let Ok(rx) = rx_log_rx.try_recv() {
-            last_rx_hex = bytes_to_hex(&rx);
+        if rx_log_rx.try_recv().is_ok() {
             had_new_data = true;
         }
 
         // ── 9. CSV log — only write when new data arrived ─────────────────────────────
         if had_new_data {
-            logger.log(build_log_entry(&flight_data, &last_rx_hex));
+            logger.log(build_log_entry(&flight_data));
         }
 
         // ── 10. Per-constellation SNR info log (once per second when any data) ─
@@ -484,9 +487,19 @@ fn gga_fix_to_rtk(fix: GpsFixQuality) -> RtkFixType {
     }
 }
 
-/// Encode a byte slice as a lower-case hex string for the CSV log.
-fn bytes_to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+fn average_active_snr(data: &FlightData) -> u8 {
+    let values = [
+        data.gps_snr_gps,
+        data.gps_snr_glonass,
+        data.gps_snr_galileo,
+        data.gps_snr_beidou,
+    ];
+    let (sum, count) = values
+        .iter()
+        .copied()
+        .filter(|&v| v > 0)
+        .fold((0u16, 0u16), |(sum, count), v| (sum + v as u16, count + 1));
+    if count == 0 { 0 } else { (sum / count) as u8 }
 }
 
 /// Block until systemd-timesyncd reports the clock is NTP-synchronized, or

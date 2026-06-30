@@ -643,7 +643,8 @@ private fun AntennaPointingSection(
         // ── Title ─────────────────────────────────────────────────────────────
         Text(
             text = when {
-                uiState.distanceIsGps -> "Point Antenna"
+                uiState.targetSource == "GPS + RSSI" -> "Point Antenna - GPS + RSSI"
+                uiState.distanceIsGps -> "Point Antenna - GPS"
                 uiState.rssiHasEstimate -> "RSSI Estimate"
                 inRssiScanMode -> "RSSI Scan — Slowly Pan 360°"
                 else -> "Awaiting Signal"
@@ -670,7 +671,7 @@ private fun AntennaPointingSection(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        if (uiState.distanceIsGps) "GPS" else "~RSSI",
+                        uiState.targetSource,
                         style = MaterialTheme.typography.labelSmall,
                         color = onContainer.copy(alpha = 0.4f),
                         modifier = Modifier.padding(bottom = 6.dp)
